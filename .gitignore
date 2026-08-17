@@ -1,0 +1,47 @@
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# Build
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+
+# NuGet
+*.nupkg
+
+
+# Archivos de compilación y temporales de .NET
+bin/
+obj/
+
+# Configuraciones locales de IDE / Visual Studio / VS Code
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Archivo de configuración local (si contiene contraseñas/cadenas de conexión sensibles)
+appsettings.Development.json
+
+# Archivos de configuración con credenciales sensibles
+appsettings.json
+appsettings.*.json

@@ -8,7 +8,7 @@ public class Usuario
     [Key]
     public long IdUsuario { get; set; }
 
-    public long IdRol { get; set; }
+    public long? IdRol { get; set; }
     public long? IdCargo { get; set; }
     public long? IdCiudad { get; set; }
     public long? IdEstadoCivil { get; set; }
@@ -38,7 +38,7 @@ public class Usuario
     public DateTime FechaActualizacion { get; set; } = DateTime.UtcNow;
 
     // Relaciones pertenencia
-    public virtual Rol Rol { get; set; } = null!;
+    public virtual Rol? Rol { get; set; }
     public virtual Cargo? Cargo { get; set; }
     public virtual Ciudad? Ciudad { get; set; }
     public virtual EstadoCivil? EstadoCivil { get; set; }

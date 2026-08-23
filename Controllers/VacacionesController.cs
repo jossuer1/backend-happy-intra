@@ -8,7 +8,7 @@ namespace Intranet.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize] // Requiere estar autenticado
 public class VacacionesController : ControllerBase
 {
     private readonly IVacacionService _vacacionService;
@@ -18,62 +18,80 @@ public class VacacionesController : ControllerBase
         _vacacionService = vacacionService;
     }
 
-    // Solo RRHH puede descontar días de vacaciones a un usuario
-    [HttpPost("descuento")]
-    [Authorize(Roles = "RRHH")]
-    public async Task<IActionResult> RegistrarDescuento([FromBody] VacacionDescuentoCrearDto dto)
+    // 1. Obtener el saldo propio o el de cualquier usuario si es RRHH
+    [HttpGet("saldo/{idUsuario}")]
+    public async Task<IActionResult> ObtenerSaldo(long idUsuario)
     {
-        var idRegistradoPor = ObtenerIdUsuarioActual();
-        var resultado = await _vacacionService.RegistrarDescuentoAsync(dto, idRegistradoPor);
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var esRrhh = User.IsInRole("RRHH");
 
-        if (!resultado.Exito)
-            return BadRequest(new { mensaje = resultado.Mensaje });
-
-        return Ok(resultado.Data);
-    }
-
-    // Solo RRHH puede devolver días por corrección de un error
-    [HttpPost("ajuste")]
-    [Authorize(Roles = "RRHH")]
-    public async Task<IActionResult> RegistrarAjuste([FromBody] VacacionAjusteCrearDto dto)
-    {
-        var idRegistradoPor = ObtenerIdUsuarioActual();
-        var resultado = await _vacacionService.RegistrarAjusteAsync(dto, idRegistradoPor);
-
-        if (!resultado.Exito)
-            return BadRequest(new { mensaje = resultado.Mensaje });
-
-        return Ok(resultado.Data);
-    }
-
-    // Un usuario ve su propio saldo; RRHH puede ver el de cualquiera
-    [HttpGet("usuario/{idUsuario}/saldo")]
-    public async Task<IActionResult> GetSaldo(long idUsuario)
-    {
-        if (!PuedeVerDatosDe(idUsuario))
-            return Forbid();
+        if (!esRrhh && currentUserId != idUsuario)
+            return Forbid(); // Un empleado normal no puede ver el saldo de otros
 
         var resultado = await _vacacionService.ObtenerSaldoAsync(idUsuario);
         if (!resultado.Exito)
-            return NotFound(new { mensaje = resultado.Mensaje });
+            return BadRequest(new { mensaje = resultado.Mensaje });
 
         return Ok(resultado.Data);
     }
 
-    // Un usuario ve su propio historial; RRHH puede ver el de cualquiera
-    [HttpGet("usuario/{idUsuario}")]
-    public async Task<IActionResult> GetHistorial(long idUsuario)
+    // 2. Obtener historial propio o el de cualquier usuario si es RRHH
+    [HttpGet("historial/{idUsuario}")]
+    public async Task<IActionResult> ObtenerHistorial(long idUsuario)
     {
-        if (!PuedeVerDatosDe(idUsuario))
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var esRrhh = User.IsInRole("RRHH");
+
+        if (!esRrhh && currentUserId != idUsuario)
             return Forbid();
 
         var resultado = await _vacacionService.ObtenerHistorialAsync(idUsuario);
         return Ok(resultado.Data);
     }
 
-    private long ObtenerIdUsuarioActual()
-        => long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    // 3. Endpoint conveniente para que el empleado logueado vea su propio historial directamente
+    [HttpGet("mis-vacaciones")]
+    public async Task<IActionResult> ObtenerMisVacaciones()
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.ObtenerHistorialAsync(currentUserId);
+        return Ok(resultado.Data);
+    }
 
-    private bool PuedeVerDatosDe(long idUsuario)
-        => User.IsInRole("RRHH") || ObtenerIdUsuarioActual() == idUsuario;
+    // 4. Exclusivo RRHH: Obtener el registro global de vacaciones de toda la empresa
+    [HttpGet("todas")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerTodas()
+    {
+        var resultado = await _vacacionService.ObtenerTodasLasVacacionesAsync();
+        return Ok(resultado.Data);
+    }
+
+    // 5. Registrar descuento de vacaciones (RRHH)
+    [HttpPost("descuento")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> RegistrarDescuento([FromBody] VacacionDescuentoCrearDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.RegistrarDescuentoAsync(dto, currentUserId);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
+
+    // 6. Registrar ajuste/corrección de vacaciones (RRHH)
+    [HttpPost("ajuste")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> RegistrarAjuste([FromBody] VacacionAjusteCrearDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.RegistrarAjusteAsync(dto, currentUserId);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
 }

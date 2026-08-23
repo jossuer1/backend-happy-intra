@@ -13,6 +13,28 @@ public class VacacionService : IVacacionService
         _context = context;
     }
 
+    public async Task<ServiceResult<List<VacacionDto>>> ObtenerTodasLasVacacionesAsync()
+    {
+        var movimientos = await _context.Vacaciones
+            .Include(v => v.Usuario)
+            .Include(v => v.RegistradoPor)
+            .OrderByDescending(v => v.FechaRegistro)
+            .Select(v => new VacacionDto
+            {
+                IdVacacion = v.IdVacacion,
+                TipoMovimiento = v.TipoMovimiento,
+                FechaInicio = v.FechaInicio,
+                FechaFin = v.FechaFin,
+                DiasTomados = v.DiasTomados,
+                Observacion = v.Observacion,
+                FechaRegistro = v.FechaRegistro,
+                RegistradoPorNombre = $"{v.RegistradoPor.Nombre} {v.RegistradoPor.Apellido}"
+            })
+            .ToListAsync();
+
+        return ServiceResult<List<VacacionDto>>.Ok(movimientos);
+    }
+
     public async Task<ServiceResult<SaldoVacacionesDto>> ObtenerSaldoAsync(long idUsuario)
     {
         var usuario = await _context.Usuarios.FindAsync(idUsuario);

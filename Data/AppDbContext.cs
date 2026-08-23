@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<Genero> Generos { get; set; }
     public DbSet<EstadoCivil> EstadosCiviles { get; set; }
     public DbSet<Vacacion> Vacaciones { get; set; }
+    public DbSet<Imagen> Imagen { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -38,6 +38,7 @@ public class CrearUsuarioDto
     public string Nombre { get; set; } = null!;
     public string Apellido { get; set; } = null!;
     public string CorreoEmpresa { get; set; } = null!;
+    public string CorreoPersonal { get; set; } = null!;
 
     // Claves foráneas (sin IdRol)
     public long? IdCargo { get; set; }

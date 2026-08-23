@@ -20,6 +20,7 @@ public class Usuario
     public string Apellido { get; set; } = null!;
     public string UsuarioNombre { get; set; } = null!; // Corresponde a la columna 'usuario'
     public string CorreoEmpresa { get; set; } = null!;
+    public string CorreoPersonal { get; set; } = null!;
 
     public string? Telefono { get; set; }
     public string? Direccion { get; set; }

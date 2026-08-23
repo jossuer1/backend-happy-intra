@@ -31,6 +31,9 @@ public class UsuarioService : IUsuarioService
         if (await _context.Usuarios.AnyAsync(u => u.CorreoEmpresa == dto.CorreoEmpresa))
             return ServiceResult<UsuarioCreadoDto>.Fallo("El correo empresarial ya está registrado.");
 
+        if (await _context.Usuarios.AnyAsync(u => u.CorreoPersonal == dto.CorreoPersonal))
+            return ServiceResult<UsuarioCreadoDto>.Fallo("El correo personal ya está registrado.");
+
         // 2. Generar y hashear contraseña temporal
         string claveTemporal = GenerarContrasenaAleatoria(10);
         string contrasenaHash = BCrypt.Net.BCrypt.HashPassword(claveTemporal);
@@ -43,6 +46,7 @@ public class UsuarioService : IUsuarioService
             Apellido = dto.Apellido,
             UsuarioNombre = dto.Cedula.Trim(),
             CorreoEmpresa = dto.CorreoEmpresa,
+            CorreoPersonal = dto.CorreoPersonal,
             ContrasenaHash = contrasenaHash,
             Telefono = dto.Telefono,
             Direccion = dto.Direccion,
@@ -99,7 +103,7 @@ public class UsuarioService : IUsuarioService
         var urlIntranet = _config["Intranet:UrlBase"] ?? "https://intranet.happypay.com";
 
         await _emailService.SendEmailAsync(
-            usuario.CorreoEmpresa,
+            usuario.CorreoPersonal,
             $"{usuario.Nombre} {usuario.Apellido}",
             "¡Bienvenido a Happy Pay! Aquí están tus credenciales",
             PlantillasCorreo.BienvenidaConCredenciales(usuario.Nombre, usuario.UsuarioNombre, claveTemporal, urlIntranet)
@@ -113,6 +117,7 @@ public class UsuarioService : IUsuarioService
             Apellido = usuario.Apellido,
             UsuarioAcceso = usuario.UsuarioNombre,
             CorreoEmpresa = usuario.CorreoEmpresa,
+            CorreoPersonal = usuario.CorreoPersonal,
             ClaveTemporal = claveTemporal,
             DebeCambiarContrasena = usuario.DebeCambiarContrasena
         };

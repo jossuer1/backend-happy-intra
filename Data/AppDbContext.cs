@@ -14,6 +14,13 @@ public class AppDbContext : DbContext
     public DbSet<Banco> Bancos { get; set; }
 
     public DbSet<Rol> Roles { get; set; }
+    public DbSet<Ciudad> Ciudades { get; set; }
+    public DbSet<Provincia> Provincias { get; set; }
+    public DbSet<Region> Regiones { get; set; }
+    public DbSet<Etnia> Etnias { get; set; }
+    public DbSet<Genero> Generos { get; set; }
+    public DbSet<EstadoCivil> EstadosCiviles { get; set; }
+    public DbSet<Vacacion> Vacaciones { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -89,6 +96,45 @@ public class AppDbContext : DbContext
             new Banco { IdBanco = 16, Nombre = "Cooperativa Andalucía" },
             new Banco { IdBanco = 17, Nombre = "Cooperativa San Francisco" },
             new Banco { IdBanco = 18, Nombre = "Mutualista Pichincha" }
+        );
+        // 4. Regiones del Ecuador
+        modelBuilder.Entity<Region>().HasData(
+            new Region { IdRegion = 1, Nombre = "Costa" },
+            new Region { IdRegion = 2, Nombre = "Sierra" },
+            new Region { IdRegion = 3, Nombre = "Amazonía" },
+            new Region { IdRegion = 4, Nombre = "Insular" }
+        );
+
+        // 5. Provincias del Ecuador (24), asociadas a su región
+        modelBuilder.Entity<Provincia>().HasData(
+            // Costa
+            new Provincia { IdProvincia = 1, Nombre = "Esmeraldas", IdRegion = 1 },
+            new Provincia { IdProvincia = 2, Nombre = "Manabí", IdRegion = 1 },
+            new Provincia { IdProvincia = 3, Nombre = "Santo Domingo de los Tsáchilas", IdRegion = 1 },
+            new Provincia { IdProvincia = 4, Nombre = "Los Ríos", IdRegion = 1 },
+            new Provincia { IdProvincia = 5, Nombre = "Guayas", IdRegion = 1 },
+            new Provincia { IdProvincia = 6, Nombre = "Santa Elena", IdRegion = 1 },
+            new Provincia { IdProvincia = 7, Nombre = "El Oro", IdRegion = 1 },
+            // Sierra
+            new Provincia { IdProvincia = 8, Nombre = "Carchi", IdRegion = 2 },
+            new Provincia { IdProvincia = 9, Nombre = "Imbabura", IdRegion = 2 },
+            new Provincia { IdProvincia = 10, Nombre = "Pichincha", IdRegion = 2 },
+            new Provincia { IdProvincia = 11, Nombre = "Cotopaxi", IdRegion = 2 },
+            new Provincia { IdProvincia = 12, Nombre = "Tungurahua", IdRegion = 2 },
+            new Provincia { IdProvincia = 13, Nombre = "Bolívar", IdRegion = 2 },
+            new Provincia { IdProvincia = 14, Nombre = "Chimborazo", IdRegion = 2 },
+            new Provincia { IdProvincia = 15, Nombre = "Cañar", IdRegion = 2 },
+            new Provincia { IdProvincia = 16, Nombre = "Azuay", IdRegion = 2 },
+            new Provincia { IdProvincia = 17, Nombre = "Loja", IdRegion = 2 },
+            // Amazonía
+            new Provincia { IdProvincia = 18, Nombre = "Sucumbíos", IdRegion = 3 },
+            new Provincia { IdProvincia = 19, Nombre = "Napo", IdRegion = 3 },
+            new Provincia { IdProvincia = 20, Nombre = "Orellana", IdRegion = 3 },
+            new Provincia { IdProvincia = 21, Nombre = "Pastaza", IdRegion = 3 },
+            new Provincia { IdProvincia = 22, Nombre = "Morona Santiago", IdRegion = 3 },
+            new Provincia { IdProvincia = 23, Nombre = "Zamora Chinchipe", IdRegion = 3 },
+            // Insular
+            new Provincia { IdProvincia = 24, Nombre = "Galápagos", IdRegion = 4 }
         );
     }
 

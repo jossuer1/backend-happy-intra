@@ -15,6 +15,16 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendLocal", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
 // Registrar DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -53,13 +63,14 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(); // Esto habilita la interfaz visual en /swagger
+    app.UseSwaggerUI();
 }
-app.UseAuthentication(); // <- OBLIGATORIO: Debe ir antes de UseAuthorization
-app.UseAuthorization();
-app.UseHttpsRedirection();
 
-// Mapear los controladores (IMPORTANTE: Esto es lo que faltaba)
+app.UseHttpsRedirection();
+app.UseCors("FrontendLocal");
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();

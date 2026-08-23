@@ -8,8 +8,9 @@ public class Vacacion
     public long IdVacacion { get; set; }
     public long IdUsuario { get; set; }
     public long IdRegistradoPor { get; set; }
-    public DateTime FechaInicio { get; set; }
-    public DateTime FechaFin { get; set; }
+    public string TipoMovimiento { get; set; } = null!; // "Descuento" (vacación tomada) o "Ajuste" (corrección manual)
+    public DateTime? FechaInicio { get; set; }
+    public DateTime? FechaFin { get; set; }
     public int DiasTomados { get; set; }
     public string? Observacion { get; set; }
     public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;

@@ -3,6 +3,7 @@ using System;
 using Intranet.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Intranet.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823203531_FixCiudadForeignKey")]
+    partial class FixCiudadForeignKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -489,6 +492,9 @@ namespace Intranet.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdDatoBancario"));
 
+                    b.Property<long>("BancoIdBanco")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("Estado")
                         .HasColumnType("boolean");
 
@@ -506,11 +512,14 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long>("UsuarioIdUsuario")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdDatoBancario");
 
-                    b.HasIndex("IdBanco");
+                    b.HasIndex("BancoIdBanco");
 
-                    b.HasIndex("IdUsuario");
+                    b.HasIndex("UsuarioIdUsuario");
 
                     b.ToTable("DatoBancario");
                 });
@@ -1114,13 +1123,13 @@ namespace Intranet.Migrations
                 {
                     b.HasOne("Intranet.Models.Banco", "Banco")
                         .WithMany("DatosBancarios")
-                        .HasForeignKey("IdBanco")
+                        .HasForeignKey("BancoIdBanco")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Intranet.Models.Usuario", "Usuario")
                         .WithMany("DatosBancarios")
-                        .HasForeignKey("IdUsuario")
+                        .HasForeignKey("UsuarioIdUsuario")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

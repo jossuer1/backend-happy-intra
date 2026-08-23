@@ -3,6 +3,7 @@ using System;
 using Intranet.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Intranet.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260823195716_ActualizarUsuarioYVacaciones")]
+    partial class ActualizarUsuarioYVacaciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -434,9 +437,12 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long>("ProvinciaIdProvincia")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdCiudad");
 
-                    b.HasIndex("IdProvincia");
+                    b.HasIndex("ProvinciaIdProvincia");
 
                     b.ToTable("Ciudades");
                 });
@@ -489,6 +495,9 @@ namespace Intranet.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdDatoBancario"));
 
+                    b.Property<long>("BancoIdBanco")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("Estado")
                         .HasColumnType("boolean");
 
@@ -506,11 +515,14 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long>("UsuarioIdUsuario")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdDatoBancario");
 
-                    b.HasIndex("IdBanco");
+                    b.HasIndex("BancoIdBanco");
 
-                    b.HasIndex("IdUsuario");
+                    b.HasIndex("UsuarioIdUsuario");
 
                     b.ToTable("DatoBancario");
                 });
@@ -630,181 +642,14 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long>("RegionIdRegion")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdProvincia");
 
-                    b.HasIndex("IdRegion");
+                    b.HasIndex("RegionIdRegion");
 
                     b.ToTable("Provincias");
-
-                    b.HasData(
-                        new
-                        {
-                            IdProvincia = 1L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Esmeraldas"
-                        },
-                        new
-                        {
-                            IdProvincia = 2L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Manabí"
-                        },
-                        new
-                        {
-                            IdProvincia = 3L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Santo Domingo de los Tsáchilas"
-                        },
-                        new
-                        {
-                            IdProvincia = 4L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Los Ríos"
-                        },
-                        new
-                        {
-                            IdProvincia = 5L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Guayas"
-                        },
-                        new
-                        {
-                            IdProvincia = 6L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "Santa Elena"
-                        },
-                        new
-                        {
-                            IdProvincia = 7L,
-                            Estado = true,
-                            IdRegion = 1L,
-                            Nombre = "El Oro"
-                        },
-                        new
-                        {
-                            IdProvincia = 8L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Carchi"
-                        },
-                        new
-                        {
-                            IdProvincia = 9L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Imbabura"
-                        },
-                        new
-                        {
-                            IdProvincia = 10L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Pichincha"
-                        },
-                        new
-                        {
-                            IdProvincia = 11L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Cotopaxi"
-                        },
-                        new
-                        {
-                            IdProvincia = 12L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Tungurahua"
-                        },
-                        new
-                        {
-                            IdProvincia = 13L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Bolívar"
-                        },
-                        new
-                        {
-                            IdProvincia = 14L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Chimborazo"
-                        },
-                        new
-                        {
-                            IdProvincia = 15L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Cañar"
-                        },
-                        new
-                        {
-                            IdProvincia = 16L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Azuay"
-                        },
-                        new
-                        {
-                            IdProvincia = 17L,
-                            Estado = true,
-                            IdRegion = 2L,
-                            Nombre = "Loja"
-                        },
-                        new
-                        {
-                            IdProvincia = 18L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Sucumbíos"
-                        },
-                        new
-                        {
-                            IdProvincia = 19L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Napo"
-                        },
-                        new
-                        {
-                            IdProvincia = 20L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Orellana"
-                        },
-                        new
-                        {
-                            IdProvincia = 21L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Pastaza"
-                        },
-                        new
-                        {
-                            IdProvincia = 22L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Morona Santiago"
-                        },
-                        new
-                        {
-                            IdProvincia = 23L,
-                            Estado = true,
-                            IdRegion = 3L,
-                            Nombre = "Zamora Chinchipe"
-                        },
-                        new
-                        {
-                            IdProvincia = 24L,
-                            Estado = true,
-                            IdRegion = 4L,
-                            Nombre = "Galápagos"
-                        });
                 });
 
             modelBuilder.Entity("Intranet.Models.Region", b =>
@@ -825,32 +670,6 @@ namespace Intranet.Migrations
                     b.HasKey("IdRegion");
 
                     b.ToTable("Regiones");
-
-                    b.HasData(
-                        new
-                        {
-                            IdRegion = 1L,
-                            Estado = true,
-                            Nombre = "Costa"
-                        },
-                        new
-                        {
-                            IdRegion = 2L,
-                            Estado = true,
-                            Nombre = "Sierra"
-                        },
-                        new
-                        {
-                            IdRegion = 3L,
-                            Estado = true,
-                            Nombre = "Amazonía"
-                        },
-                        new
-                        {
-                            IdRegion = 4L,
-                            Estado = true,
-                            Nombre = "Insular"
-                        });
                 });
 
             modelBuilder.Entity("Intranet.Models.Rol", b =>
@@ -1092,7 +911,7 @@ namespace Intranet.Migrations
                 {
                     b.HasOne("Intranet.Models.Provincia", "Provincia")
                         .WithMany("Ciudades")
-                        .HasForeignKey("IdProvincia")
+                        .HasForeignKey("ProvinciaIdProvincia")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1114,13 +933,13 @@ namespace Intranet.Migrations
                 {
                     b.HasOne("Intranet.Models.Banco", "Banco")
                         .WithMany("DatosBancarios")
-                        .HasForeignKey("IdBanco")
+                        .HasForeignKey("BancoIdBanco")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Intranet.Models.Usuario", "Usuario")
                         .WithMany("DatosBancarios")
-                        .HasForeignKey("IdUsuario")
+                        .HasForeignKey("UsuarioIdUsuario")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1144,7 +963,7 @@ namespace Intranet.Migrations
                 {
                     b.HasOne("Intranet.Models.Region", "Region")
                         .WithMany("Provincias")
-                        .HasForeignKey("IdRegion")
+                        .HasForeignKey("RegionIdRegion")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 

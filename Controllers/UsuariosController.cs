@@ -72,21 +72,70 @@ public class UsuariosController : ControllerBase
         {
             return Forbid(); // Retorna 403 Forbidden
         }
+        var perfil = await _context.Usuarios
+            .Where(u => u.IdUsuario == id)
+            .Select(u => new PerfilDto
+            {
+                IdUsuario = u.IdUsuario,
+                Cedula = u.Cedula,
+                Nombre = u.Nombre,
+                Apellido = u.Apellido,
+                CorreoEmpresa = u.CorreoEmpresa,
+                CorreoPersonal = u.CorreoPersonal,
+                CelularPersonal = u.CelularPersonal,
+                CelularEmpresa = u.CelularEmpresa,
+                Direccion = u.Direccion,
+                UrlImagenPerfil = u.UrlImagenPerfil,
+                FechaNacimiento = u.FechaNacimiento,
+                FechaIngreso = u.FechaIngreso,
+                DiasVacacionesAsignados = u.DiasVacacionesAsignados,
+                Estado = u.Estado,
+                Rol = u.Rol != null ? u.Rol.Nombre : null,
+                Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                Departamento = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
+                Ciudad = u.Ciudad != null ? u.Ciudad.Nombre : null,
+                Genero = u.Genero != null ? u.Genero.Nombre : null,
+                EstadoCivil = u.EstadoCivil != null ? u.EstadoCivil.Nombre : null,
+                Etnia = u.Etnia != null ? u.Etnia.Nombre : null,
+                Familiares = u.Familiares.Select(f => new FamiliarDto
+                {
+                    IdFamiliar = f.IdFamiliar,
+                    Nombre = f.Nombre,
+                    Apellido = f.Apellido,
+                    Parentesco = f.Parentesco,
+                    FechaNacimiento = f.FechaNacimiento
+                }).ToList(),
+                ContactosEmergencia = u.ContactosEmergencia.Select(c => new ContactoEmergenciaDto
+                {
+                    IdContacto = c.IdContacto,
+                    Nombre = c.Nombre,
+                    Apellido = c.Apellido,
+                    Parentesco = c.Parentesco,
+                    Telefono = c.Telefono,
+                    Direccion = c.Direccion
+                }).ToList(),
+                DatosBancarios = u.DatosBancarios.Select(b => new DatoBancarioDto
+                {
+                    IdDatoBancario = b.IdDatoBancario,
+                    IdBanco = b.IdBanco,
+                    Banco = b.Banco != null ? b.Banco.Nombre : "",
+                    TipoCuenta = b.TipoCuenta,
+                    NumeroCuenta = b.NumeroCuenta
+                }).ToList(),
+                Titulos = u.Titulos.Select(t => new TituloDto
+                {
+                    IdTitulo = t.IdTitulo,
+                    NombreTitulo = t.NombreTitulo,
+                    Institucion = t.Institucion,
+                    FechaObtencion = t.FechaObtencion
+                }).ToList()
+            })
+            .FirstOrDefaultAsync();
 
-        var usuario = await _context.Usuarios
-            .Include(u => u.Rol)
-            .Include(u => u.Cargo)
-            .Include(u => u.Ciudad)
-            .Include(u => u.Familiares)
-            .Include(u => u.ContactosEmergencia)
-            .Include(u => u.DatosBancarios)
-            .Include(u => u.Titulos)
-            .FirstOrDefaultAsync(u => u.IdUsuario == id);
-
-        if (usuario == null)
+        if (perfil == null)
             return NotFound(new { mensaje = "Usuario no encontrado." });
 
-        return Ok(usuario);
+        return Ok(perfil);
     }
 
     // Endpoint conveniente para que el usuario logueado obtenga su propio perfil sin pasar su ID

@@ -48,7 +48,8 @@ public class CrearUsuarioDto
     public long? IdGenero { get; set; }
 
     // Información personal
-    public string? Telefono { get; set; }
+    public string? CelularPersonal { get; set; }
+    public string? CelularEmpresa { get; set; }
     public string? Direccion { get; set; }
     public string? UrlImagenPerfil { get; set; }
     public DateTime? FechaNacimiento { get; set; }

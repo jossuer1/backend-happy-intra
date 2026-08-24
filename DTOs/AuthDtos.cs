@@ -12,3 +12,8 @@ public class CambiarContrasenaDto
     public string ContrasenaActual { get; set; } = null!;
     public string NuevaContrasena { get; set; } = null!;
 }
+
+public class RecuperarContrasenaDto
+{
+    public string Correo { get; set; } = null!; // Correo personal
+}

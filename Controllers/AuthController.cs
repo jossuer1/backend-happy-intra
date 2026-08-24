@@ -36,4 +36,15 @@ public class AuthController : ControllerBase
 
         return Ok(new { mensaje = resultado.Data });
     }
+
+    [HttpPost("recuperar-contrasena")]
+    public async Task<IActionResult> RecuperarContrasena([FromBody] RecuperarContrasenaDto dto)
+    {
+        var resultado = await _authService.SolicitarRecuperacionAsync(dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(new { mensaje = resultado.Data });
+    }
 }

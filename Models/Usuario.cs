@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Intranet.Models;
 
 public class Usuario
@@ -8,6 +10,7 @@ public class Usuario
     [Key]
     public long IdUsuario { get; set; }
 
+    // --- Llaves Foráneas (IDs) ---
     public long? IdRol { get; set; }
     public long? IdCargo { get; set; }
     public long? IdCiudad { get; set; }
@@ -15,6 +18,7 @@ public class Usuario
     public long? IdEtnia { get; set; }
     public long? IdGenero { get; set; }
 
+    // --- Propiedades Escalares ---
     public string Cedula { get; set; } = null!;
     public string Nombre { get; set; } = null!;
     public string Apellido { get; set; } = null!;
@@ -22,7 +26,8 @@ public class Usuario
     public string CorreoEmpresa { get; set; } = null!;
     public string CorreoPersonal { get; set; } = null!;
 
-    public string? Telefono { get; set; }
+    public string? CelularPersonal { get; set; }
+    public string? CelularEmpresa { get; set; }
     public string? Direccion { get; set; }
 
     public DateTime? FechaNacimiento { get; set; }
@@ -38,15 +43,26 @@ public class Usuario
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime FechaActualizacion { get; set; } = DateTime.UtcNow;
 
-    // Relaciones pertenencia
+    // --- Relaciones de Pertenencia y Navegación (Con ForeignKey explícito) ---
+    [ForeignKey(nameof(IdRol))]
     public virtual Rol? Rol { get; set; }
+
+    [ForeignKey(nameof(IdCargo))]
     public virtual Cargo? Cargo { get; set; }
+
+    [ForeignKey(nameof(IdCiudad))]
     public virtual Ciudad? Ciudad { get; set; }
+
+    [ForeignKey(nameof(IdEstadoCivil))]
     public virtual EstadoCivil? EstadoCivil { get; set; }
+
+    [ForeignKey(nameof(IdEtnia))]
     public virtual Etnia? Etnia { get; set; }
+
+    [ForeignKey(nameof(IdGenero))]
     public virtual Genero? Genero { get; set; }
 
-    // Relaciones de colecciones
+    // --- Relaciones de Colecciones ---
     public virtual ICollection<Familiar> Familiares { get; set; } = new List<Familiar>();
     public virtual ICollection<ContactoEmergencia> ContactosEmergencia { get; set; } = new List<ContactoEmergencia>();
     public virtual ICollection<DatoBancario> DatosBancarios { get; set; } = new List<DatoBancario>();

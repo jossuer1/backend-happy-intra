@@ -3,6 +3,7 @@ using System;
 using Intranet.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Intranet.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824002317_AgregarTablaImagenes")]
+    partial class AgregarTablaImagenes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -968,12 +971,6 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("CelularEmpresa")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CelularPersonal")
-                        .HasColumnType("text");
-
                     b.Property<long?>("CiudadIdCiudad")
                         .HasColumnType("bigint");
 
@@ -1046,6 +1043,9 @@ namespace Intranet.Migrations
 
                     b.Property<long?>("RolIdRol")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Telefono")
+                        .HasColumnType("text");
 
                     b.Property<string>("UrlImagenPerfil")
                         .HasColumnType("text");

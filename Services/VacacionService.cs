@@ -41,6 +41,9 @@ public class VacacionService : IVacacionService
         if (usuario == null)
             return ServiceResult<SaldoVacacionesDto>.Fallo("Usuario no encontrado.");
 
+        if (!usuario.TieneVacaciones)
+            return ServiceResult<SaldoVacacionesDto>.Fallo("Este usuario no tiene el beneficio de vacaciones habilitado.");
+
         var movimientos = await _context.Vacaciones
             .Where(v => v.IdUsuario == idUsuario && v.Estado)
             .ToListAsync();
@@ -65,6 +68,9 @@ public class VacacionService : IVacacionService
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);
         if (usuario == null)
             return ServiceResult<VacacionDto>.Fallo("Usuario no encontrado.");
+
+        if (!usuario.TieneVacaciones)
+            return ServiceResult<VacacionDto>.Fallo("Este usuario no tiene el beneficio de vacaciones habilitado.");
 
         if (dto.FechaFin.Date < dto.FechaInicio.Date)
             return ServiceResult<VacacionDto>.Fallo("La fecha de fin no puede ser anterior a la fecha de inicio.");
@@ -104,6 +110,9 @@ public class VacacionService : IVacacionService
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);
         if (usuario == null)
             return ServiceResult<VacacionDto>.Fallo("Usuario no encontrado.");
+
+        if (!usuario.TieneVacaciones)
+            return ServiceResult<VacacionDto>.Fallo("Este usuario no tiene el beneficio de vacaciones habilitado.");
 
         if (dto.Dias <= 0)
             return ServiceResult<VacacionDto>.Fallo("El número de días a corregir debe ser mayor a cero.");
@@ -149,6 +158,47 @@ public class VacacionService : IVacacionService
             .ToListAsync();
 
         return ServiceResult<List<VacacionDto>>.Ok(movimientos);
+    }
+
+    // Resumen por empleado para las pantallas de RRHH (Gestión de Vacaciones / Saldos Personal).
+    // Se incluyen TODOS los usuarios activos, incluso los que no tienen el beneficio,
+    // para que el frontend los pueda mostrar deshabilitados en vez de ocultarlos sin explicación.
+    public async Task<ServiceResult<List<ResumenVacacionesDto>>> ObtenerResumenAsync()
+    {
+        var usuarios = await _context.Usuarios
+            .Include(u => u.Cargo!)
+                .ThenInclude(c => c.Area)
+            .Where(u => u.Estado)
+            .ToListAsync();
+
+        var movimientos = await _context.Vacaciones
+            .Where(v => v.Estado)
+            .ToListAsync();
+
+        var resumen = usuarios.Select(u =>
+        {
+            var movsUsuario = movimientos.Where(v => v.IdUsuario == u.IdUsuario).ToList();
+            int diasDescontados = movsUsuario.Where(v => v.TipoMovimiento == "Descuento").Sum(v => v.DiasTomados);
+            int diasAjustados = movsUsuario.Where(v => v.TipoMovimiento == "Ajuste").Sum(v => v.DiasTomados);
+
+            return new ResumenVacacionesDto
+            {
+                IdUsuario = u.IdUsuario,
+                Nombre = $"{u.Nombre} {u.Apellido}",
+                Departamento = u.Cargo?.Area?.Nombre,
+                FechaIngreso = u.FechaIngreso,
+                TieneVacaciones = u.TieneVacaciones,
+                DiasGanados = u.TieneVacaciones ? u.DiasVacacionesAsignados : 0,
+                DiasTomados = u.TieneVacaciones ? diasDescontados : 0,
+                SaldoDisponible = u.TieneVacaciones
+                    ? (u.DiasVacacionesAsignados - diasDescontados + diasAjustados)
+                    : 0
+            };
+        })
+        .OrderBy(r => r.Nombre)
+        .ToList();
+
+        return ServiceResult<List<ResumenVacacionesDto>>.Ok(resumen);
     }
 
     private async Task<VacacionDto> MapearDtoAsync(long idVacacion)

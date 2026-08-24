@@ -53,7 +53,8 @@ public class UsuariosController : ControllerBase
                 u.CorreoEmpresa,
                 Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
-                u.Estado
+                u.Estado,
+                u.TieneVacaciones
             })
             .ToListAsync();
 
@@ -88,6 +89,7 @@ public class UsuariosController : ControllerBase
                 UrlImagenPerfil = u.UrlImagenPerfil,
                 FechaNacimiento = u.FechaNacimiento,
                 FechaIngreso = u.FechaIngreso,
+                TieneVacaciones = u.TieneVacaciones,
                 DiasVacacionesAsignados = u.DiasVacacionesAsignados,
                 Estado = u.Estado,
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
@@ -138,11 +140,49 @@ public class UsuariosController : ControllerBase
         return Ok(perfil);
     }
 
+    [HttpPut("{id}")]
+    [Authorize] // Asegura que solo usuarios autenticados consuman este endpoint
+    public async Task<IActionResult> Actualizar(long id, [FromBody] ActualizarUsuarioDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            await _usuarioService.ActualizarUsuarioAsync(id, dto);
+            return Ok(new { mensaje = "Usuario actualizado exitosamente." });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { mensaje = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { mensaje = "Error interno del servidor", error = ex.Message });
+        }
+    }
+
     // Endpoint conveniente para que el usuario logueado obtenga su propio perfil sin pasar su ID
     [HttpGet("mi-perfil")]
     public async Task<IActionResult> GetMiPerfil()
     {
         var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         return await GetUsuarioPorId(currentUserId);
+    }
+
+    // Solo RRHH: activar/desactivar el beneficio de vacaciones de un usuario existente
+    // y, opcionalmente, ajustar los días asignados.
+    [HttpPatch("{id}/vacaciones")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ActualizarVacaciones(long id, [FromBody] ActualizarVacacionesUsuarioDto dto)
+    {
+        var resultado = await _usuarioService.ActualizarVacacionesAsync(id, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
     }
 }

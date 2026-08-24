@@ -9,4 +9,5 @@ public interface IVacacionService
     Task<ServiceResult<SaldoVacacionesDto>> ObtenerSaldoAsync(long idUsuario);
     Task<ServiceResult<List<VacacionDto>>> ObtenerHistorialAsync(long idUsuario);
     Task<ServiceResult<List<VacacionDto>>> ObtenerTodasLasVacacionesAsync();
+    Task<ServiceResult<List<ResumenVacacionesDto>>> ObtenerResumenAsync();
 }

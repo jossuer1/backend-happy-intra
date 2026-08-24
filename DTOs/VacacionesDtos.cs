@@ -37,3 +37,33 @@ public class SaldoVacacionesDto
     public int DiasAjustados { get; set; }
     public int DiasDisponibles { get; set; }
 }
+
+// Resumen por empleado para las pantallas de RRHH (Gestión de Vacaciones / Saldos Personal).
+// Incluye a TODOS los usuarios activos, incluso los que no tienen el beneficio,
+// para que el frontend pueda mostrarlos deshabilitados en vez de que "desaparezcan".
+public class ResumenVacacionesDto
+{
+    public long IdUsuario { get; set; }
+    public string Nombre { get; set; } = null!;
+    public string? Departamento { get; set; }
+    public DateTime? FechaIngreso { get; set; }
+    public bool TieneVacaciones { get; set; }
+    public int DiasGanados { get; set; }
+    public int DiasTomados { get; set; }
+    public int SaldoDisponible { get; set; }
+}
+
+// Activar/desactivar el beneficio de vacaciones de un usuario existente,
+// y opcionalmente ajustar los días asignados.
+public class ActualizarVacacionesUsuarioDto
+{
+    public bool TieneVacaciones { get; set; }
+    public int? DiasVacacionesAsignados { get; set; }
+}
+
+public class VacacionesUsuarioActualizadoDto
+{
+    public long IdUsuario { get; set; }
+    public bool TieneVacaciones { get; set; }
+    public int DiasVacacionesAsignados { get; set; }
+}

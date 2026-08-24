@@ -37,7 +37,13 @@ public class Usuario
     public bool DebeCambiarContrasena { get; set; } = true;
 
     public string? UrlImagenPerfil { get; set; }
+
+    // --- Beneficio de Vacaciones ---
+    // No todos los colaboradores tienen derecho a vacaciones (ej. pasantes, honorarios).
+    // Si es false, DiasVacacionesAsignados se mantiene en 0 y el usuario no accede al módulo.
+    public bool TieneVacaciones { get; set; } = true;
     public int DiasVacacionesAsignados { get; set; } = 15;
+
     public bool Estado { get; set; } = true;
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;

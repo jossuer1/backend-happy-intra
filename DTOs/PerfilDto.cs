@@ -54,6 +54,7 @@ public class PerfilDto
     public DateTime? FechaNacimiento { get; set; }
     public DateTime? FechaIngreso { get; set; }
 
+    public bool TieneVacaciones { get; set; }
     public int DiasVacacionesAsignados { get; set; }
     public bool Estado { get; set; }
 

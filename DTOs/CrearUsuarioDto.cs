@@ -55,6 +55,11 @@ public class CrearUsuarioDto
     public DateTime? FechaNacimiento { get; set; }
     public DateTime? FechaIngreso { get; set; }
 
+    // Beneficio de vacaciones: por defecto todo usuario nuevo lo tiene habilitado.
+    // Si TieneVacaciones = false, se ignora DiasVacacionesAsignados y se guarda en 0.
+    public bool TieneVacaciones { get; set; } = true;
+    public int? DiasVacacionesAsignados { get; set; }
+
     // Listas anidadas
     public List<FamiliarCrearDto>? Familiares { get; set; }
     public List<ContactoEmergenciaCrearDto>? ContactosEmergencia { get; set; }

@@ -67,6 +67,17 @@ public class VacacionesController : ControllerBase
         return Ok(resultado.Data);
     }
 
+    // 4.1 Exclusivo RRHH: Resumen por empleado (saldo actual) para las pantallas
+    // de "Gestión de Vacaciones" y "Saldos Personal". Incluye a quienes NO tienen
+    // el beneficio habilitado, marcados con tieneVacaciones = false.
+    [HttpGet("resumen")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerResumen()
+    {
+        var resultado = await _vacacionService.ObtenerResumenAsync();
+        return Ok(resultado.Data);
+    }
+
     // 5. Registrar descuento de vacaciones (RRHH)
     [HttpPost("descuento")]
     [Authorize(Roles = "RRHH")]

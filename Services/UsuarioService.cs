@@ -61,7 +61,12 @@ public class UsuarioService : IUsuarioService
             IdEtnia = dto.IdEtnia,
             IdGenero = dto.IdGenero,
             DebeCambiarContrasena = true,
-            DiasVacacionesAsignados = 15,
+
+            // Si el usuario no tiene el beneficio de vacaciones, los días asignados quedan en 0
+            // sin importar lo que se haya mandado en el DTO.
+            TieneVacaciones = dto.TieneVacaciones,
+            DiasVacacionesAsignados = dto.TieneVacaciones ? (dto.DiasVacacionesAsignados ?? 15) : 0,
+
             Estado = true,
 
             Familiares = dto.Familiares?.Select(f => new Familiar
@@ -124,6 +129,60 @@ public class UsuarioService : IUsuarioService
         };
 
         return ServiceResult<UsuarioCreadoDto>.Ok(resultado);
+    }
+
+    public async Task<ServiceResult<VacacionesUsuarioActualizadoDto>> ActualizarVacacionesAsync(long idUsuario, ActualizarVacacionesUsuarioDto dto)
+    {
+        var usuario = await _context.Usuarios.FindAsync(idUsuario);
+        if (usuario == null)
+            return ServiceResult<VacacionesUsuarioActualizadoDto>.Fallo("Usuario no encontrado.");
+
+        if (dto.TieneVacaciones && dto.DiasVacacionesAsignados.HasValue && dto.DiasVacacionesAsignados.Value < 0)
+            return ServiceResult<VacacionesUsuarioActualizadoDto>.Fallo("Los días asignados no pueden ser negativos.");
+
+        usuario.TieneVacaciones = dto.TieneVacaciones;
+
+        usuario.DiasVacacionesAsignados = dto.TieneVacaciones
+            ? (dto.DiasVacacionesAsignados ?? (usuario.DiasVacacionesAsignados > 0 ? usuario.DiasVacacionesAsignados : 15))
+            : 0;
+
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<VacacionesUsuarioActualizadoDto>.Ok(new VacacionesUsuarioActualizadoDto
+        {
+            IdUsuario = usuario.IdUsuario,
+            TieneVacaciones = usuario.TieneVacaciones,
+            DiasVacacionesAsignados = usuario.DiasVacacionesAsignados
+        });
+    }
+
+
+    public async Task ActualizarUsuarioAsync(long id, ActualizarUsuarioDto dto)
+    {
+        var usuario = await _context.Usuarios.FindAsync(id);
+        if (usuario == null)
+        {
+            throw new KeyNotFoundException("Usuario no encontrado.");
+        }
+        if (dto.Nombre != null) usuario.Nombre = dto.Nombre;
+        if (dto.Apellido != null) usuario.Apellido = dto.Apellido;
+        if (dto.Cedula != null) usuario.Cedula = dto.Cedula;
+        if (dto.CorreoEmpresa != null) usuario.CorreoEmpresa = dto.CorreoEmpresa;
+        if (dto.CorreoPersonal != null) usuario.CorreoPersonal = dto.CorreoPersonal;
+        if (dto.FechaNacimiento.HasValue) usuario.FechaNacimiento = dto.FechaNacimiento.Value;
+        if (dto.IdGenero.HasValue) usuario.IdGenero = dto.IdGenero.Value;
+        if (dto.IdEstadoCivil.HasValue) usuario.IdEstadoCivil = dto.IdEstadoCivil.Value;
+        if (dto.IdCargo.HasValue) usuario.IdCargo = dto.IdCargo.Value;
+        if (dto.IdCiudad.HasValue) usuario.IdCiudad = dto.IdCiudad.Value;
+        if (dto.FechaIngreso.HasValue) usuario.FechaIngreso = dto.FechaIngreso.Value;
+        if (dto.CelularEmpresa != null) usuario.CelularEmpresa = dto.CelularEmpresa;
+        if (dto.CelularPersonal != null) usuario.CelularPersonal = dto.CelularPersonal;
+        if (dto.Direccion != null) usuario.Direccion = dto.Direccion;
+        if (dto.TieneVacaciones.HasValue) usuario.TieneVacaciones = dto.TieneVacaciones.Value;
+        if (dto.DiasVacacionesAsignados.HasValue) usuario.DiasVacacionesAsignados = dto.DiasVacacionesAsignados.Value;
+
+        await _context.SaveChangesAsync();
     }
 
     private static string GenerarContrasenaAleatoria(int longitud = 10)

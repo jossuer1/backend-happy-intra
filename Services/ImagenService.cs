@@ -8,10 +8,36 @@ namespace Intranet.Services;
 public class ImagenService : IImagenService
 {
     private readonly AppDbContext _context;
+    private readonly ICloudinaryUploadService _uploadService; 
 
-    public ImagenService(AppDbContext context)
+    public ImagenService(AppDbContext context, ICloudinaryUploadService uploadService)
     {
         _context = context;
+        _uploadService = uploadService;
+    }
+
+    public async Task<ServiceResult<ImagenDto>> AgregarAsync(ImagenCrearDto dto)
+    {
+        if (dto.Archivo == null || dto.Archivo.Length == 0)
+            return ServiceResult<ImagenDto>.Fallo("Debe adjuntar una imagen.");
+
+        var urlImagen = await _uploadService.SubirBannerAsync(dto.Archivo);
+
+        var nuevaImagen = new Imagen
+        {
+            Titulo = dto.Titulo,
+            Descripcion = dto.Descripcion,
+            RutaImagen = urlImagen,  
+            Orden = dto.Orden,
+            Estado = true,
+            FechaCreacion = DateTime.UtcNow,
+            FechaActualizacion = DateTime.UtcNow
+        };
+
+        _context.Imagen.Add(nuevaImagen);
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<ImagenDto>.Ok(MapearDto(nuevaImagen));
     }
 
     public async Task<ServiceResult<List<ImagenDto>>> ObtenerActivasAsync()
@@ -52,28 +78,6 @@ public class ImagenService : IImagenService
             .ToListAsync();
 
         return ServiceResult<List<ImagenDto>>.Ok(imagenes);
-    }
-
-    public async Task<ServiceResult<ImagenDto>> AgregarAsync(ImagenCrearDto dto)
-    {
-        if (string.IsNullOrWhiteSpace(dto.RutaImagen))
-            return ServiceResult<ImagenDto>.Fallo("La ruta/URL de la imagen es obligatoria.");
-
-        var nuevaImagen = new Imagen
-        {
-            Titulo = dto.Titulo,
-            Descripcion = dto.Descripcion,
-            RutaImagen = dto.RutaImagen,
-            Orden = dto.Orden,
-            Estado = true,
-            FechaCreacion = DateTime.UtcNow,
-            FechaActualizacion = DateTime.UtcNow
-        };
-
-        _context.Imagen.Add(nuevaImagen);
-        await _context.SaveChangesAsync();
-
-        return ServiceResult<ImagenDto>.Ok(MapearDto(nuevaImagen));
     }
 
     public async Task<ServiceResult<ImagenDto>> ActualizarAsync(long id, ImagenActualizarDto dto)

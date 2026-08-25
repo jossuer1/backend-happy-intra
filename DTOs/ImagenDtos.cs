@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Http;
+using System.ComponentModel.DataAnnotations;
+
 namespace Intranet.DTOs;
 
 public class ImagenDto
@@ -13,10 +16,15 @@ public class ImagenDto
 
 public class ImagenCrearDto
 {
+    [Required]
     public string Titulo { get; set; } = null!;
+    
     public string? Descripcion { get; set; }
-    public string RutaImagen { get; set; } = null!;
+    
     public int Orden { get; set; } = 0;
+
+    [Required]
+    public IFormFile Archivo { get; set; } = null!; 
 }
 
 public class ImagenActualizarDto

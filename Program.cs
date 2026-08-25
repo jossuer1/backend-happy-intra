@@ -19,15 +19,21 @@ builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 
 builder.Services.AddScoped<IImagenService, ImagenService>();
 
+builder.Services.AddScoped<ICloudinaryUploadService, CloudinaryUploadService>();
+
 builder.Services.AddScoped<IVacacionService, VacacionService>();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendLocal", policy =>
     {
-        policy.WithOrigins("https://happypayintranet.netlify.app")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.WithOrigins(
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "https://happypayintranet.netlify.app"
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod();
     });
 });
 

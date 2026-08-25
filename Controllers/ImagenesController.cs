@@ -33,20 +33,18 @@ public class ImagenesController : ControllerBase
         var resultado = await _imagenService.ObtenerTodasAsync();
         return Ok(resultado.Data);
     }
-
-    // 3. Exclusivo RRHH: Guardar la nueva URL recibida desde el frontend
+    // 3. Exclusivo RRHH: Guardar la nueva imagen subida desde el frontend
     [HttpPost]
     [Authorize(Roles = "RRHH")]
-    public async Task<IActionResult> Agregar([FromBody] ImagenCrearDto dto)
+    public async Task<IActionResult> Agregar([FromForm] ImagenCrearDto dto) 
     {
-        var resultado = await _imagenService.AgregarAsync(dto);
+    var resultado = await _imagenService.AgregarAsync(dto);
 
-        if (!resultado.Exito)
-            return BadRequest(new { mensaje = resultado.Mensaje });
+    if (!resultado.Exito)
+        return BadRequest(new { mensaje = resultado.Mensaje });
 
-        return Ok(resultado.Data);
+    return Ok(resultado.Data);
     }
-
     // 4. Exclusivo RRHH: Actualizar datos u orden
     [HttpPut("{id}")]
     [Authorize(Roles = "RRHH")]

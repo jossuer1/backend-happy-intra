@@ -13,6 +13,8 @@ builder.Services.AddControllers();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+builder.Services.AddScoped<IImagenPerfilService, CloudinaryImagenPerfilService>();
+
 builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 
 builder.Services.AddScoped<IImagenService, ImagenService>();

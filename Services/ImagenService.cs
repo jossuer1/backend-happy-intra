@@ -111,6 +111,18 @@ public class ImagenService : IImagenService
         return ServiceResult<bool>.Ok(true);
     }
 
+    public async Task<ServiceResult<bool>> EliminarAsync(long id)
+    {
+        var imagen = await _context.Imagen.FindAsync(id);
+        if (imagen == null)
+            return ServiceResult<bool>.Fallo("La imagen no existe.");
+
+        _context.Imagen.Remove(imagen);
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     private static ImagenDto MapearDto(Imagen i) => new()
     {
         IdImagen = i.IdImagen,

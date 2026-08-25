@@ -9,4 +9,5 @@ public interface IImagenService
     Task<ServiceResult<ImagenDto>> AgregarAsync(ImagenCrearDto dto);
     Task<ServiceResult<ImagenDto>> ActualizarAsync(long id, ImagenActualizarDto dto);
     Task<ServiceResult<bool>> CambiarEstadoAsync(long id, bool estado);
+    Task<ServiceResult<bool>> EliminarAsync(long id);
 }

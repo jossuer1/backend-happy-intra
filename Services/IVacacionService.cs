@@ -10,4 +10,5 @@ public interface IVacacionService
     Task<ServiceResult<List<VacacionDto>>> ObtenerHistorialAsync(long idUsuario);
     Task<ServiceResult<List<VacacionDto>>> ObtenerTodasLasVacacionesAsync();
     Task<ServiceResult<List<ResumenVacacionesDto>>> ObtenerResumenAsync();
+    Task<ServiceResult<bool>> AnularAsync(long idVacacion, long idAnuladoPor);
 }

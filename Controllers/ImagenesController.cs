@@ -70,4 +70,17 @@ public class ImagenesController : ControllerBase
 
         return Ok(new { mensaje = "Imagen removida del carrusel correctamente." });
     }
+
+    // 6. Exclusivo RRHH: Eliminación definitiva (borra el registro de la base de datos)
+    [HttpDelete("{id}/eliminar")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> Eliminar(long id)
+    {
+        var resultado = await _imagenService.EliminarAsync(id);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(new { mensaje = "Imagen eliminada permanentemente." });
+    }
 }

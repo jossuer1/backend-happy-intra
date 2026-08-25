@@ -105,4 +105,20 @@ public class VacacionesController : ControllerBase
 
         return Ok(resultado.Data);
     }
+
+    // 7. Exclusivo RRHH: Anular un movimiento (Descuento o Ajuste) registrado por error.
+    // No borra el registro físicamente, lo marca Estado = false para conservar
+    // el historial/auditoría, y el saldo se recalcula automáticamente.
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> Anular(long id)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.AnularAsync(id, currentUserId);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(new { mensaje = "Movimiento de vacaciones anulado correctamente." });
+    }
 }

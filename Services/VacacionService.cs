@@ -201,6 +201,30 @@ public class VacacionService : IVacacionService
         return ServiceResult<List<ResumenVacacionesDto>>.Ok(resumen);
     }
 
+    // Anula un movimiento (Descuento o Ajuste) sin borrarlo de la BD.
+    // Al ser un Descuento, el saldo se recalcula automáticamente porque
+    // ObtenerSaldoAsync solo suma movimientos con Estado = true.
+    public async Task<ServiceResult<bool>> AnularAsync(long idVacacion, long idAnuladoPor)
+    {
+        var vacacion = await _context.Vacaciones.FindAsync(idVacacion);
+        if (vacacion == null)
+            return ServiceResult<bool>.Fallo("El movimiento de vacaciones no existe.");
+
+        if (!vacacion.Estado)
+            return ServiceResult<bool>.Fallo("Este movimiento ya se encuentra anulado.");
+
+        var anuladoPor = await _context.Usuarios.FindAsync(idAnuladoPor);
+
+        vacacion.Estado = false;
+        vacacion.Observacion = string.IsNullOrWhiteSpace(vacacion.Observacion)
+            ? $"[Anulado por {anuladoPor?.Nombre} {anuladoPor?.Apellido} el {DateTime.UtcNow:dd/MM/yyyy}]"
+            : $"{vacacion.Observacion} [Anulado por {anuladoPor?.Nombre} {anuladoPor?.Apellido} el {DateTime.UtcNow:dd/MM/yyyy}]";
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
     private async Task<VacacionDto> MapearDtoAsync(long idVacacion)
     {
         var v = await _context.Vacaciones

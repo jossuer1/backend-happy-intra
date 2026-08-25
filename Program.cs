@@ -49,7 +49,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // Cambiar a true en producción si usas HTTPS estricto
+    options.RequireHttpsMetadata = true; // Cambiar a true en producción si usas HTTPS estricto
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {

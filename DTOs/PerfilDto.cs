@@ -39,33 +39,38 @@ public class TituloDto
 public class PerfilDto
 {
     public long IdUsuario { get; set; }
-    public string Cedula { get; set; } = null!;
-    public string Nombre { get; set; } = null!;
-    public string Apellido { get; set; } = null!;
-    public string Nombres => $"{Nombre} {Apellido}".Trim();
-
-    public string CorreoEmpresa { get; set; } = null!;
-    public string CorreoPersonal { get; set; } = null!;
+    public string? Cedula { get; set; }
+    public string? Nombre { get; set; }
+    public string? Apellido { get; set; }
+    public string? CorreoEmpresa { get; set; }
+    public string? CorreoPersonal { get; set; }
     public string? CelularPersonal { get; set; }
     public string? CelularEmpresa { get; set; }
     public string? Direccion { get; set; }
     public string? UrlImagenPerfil { get; set; }
-
     public DateTime? FechaNacimiento { get; set; }
     public DateTime? FechaIngreso { get; set; }
-
     public bool TieneVacaciones { get; set; }
     public int DiasVacacionesAsignados { get; set; }
     public bool Estado { get; set; }
 
+    // --- AGREGAR ESTAS PROPIEDADES DE IDs ---
+    public long? IdCargo { get; set; }
+    public long? IdCiudad { get; set; }
+    public long? IdGenero { get; set; }
+    public long? IdEstadoCivil { get; set; }
+    public long? IdEtnia { get; set; }
+
+    // Propiedades de texto (para lectura simple si se necesitan)
     public string? Rol { get; set; }
     public string? Cargo { get; set; }
-    public string? Departamento { get; set; } // Cargo.Area.Nombre
+    public string? Departamento { get; set; }
     public string? Ciudad { get; set; }
     public string? Genero { get; set; }
     public string? EstadoCivil { get; set; }
     public string? Etnia { get; set; }
 
+    // Listas de subrecursos...
     public List<FamiliarDto> Familiares { get; set; } = new();
     public List<ContactoEmergenciaDto> ContactosEmergencia { get; set; } = new();
     public List<DatoBancarioDto> DatosBancarios { get; set; } = new();

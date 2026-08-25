@@ -17,6 +17,8 @@ builder.Services.AddScoped<IUsuarioService, UsuarioService>();
 
 builder.Services.AddScoped<IImagenService, ImagenService>();
 
+builder.Services.AddScoped<IVacacionService, VacacionService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendLocal", policy =>

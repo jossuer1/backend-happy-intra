@@ -3,11 +3,13 @@ using Intranet.DTOs;
 using Intranet.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Intranet.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[AllowAnonymous]
 public class CatalogosController : ControllerBase
 {
     private readonly AppDbContext _context;

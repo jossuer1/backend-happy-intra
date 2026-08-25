@@ -2,6 +2,82 @@ using System.ComponentModel.DataAnnotations;
 
 namespace Intranet.DTOs;
 
+// ---------------------------------------------------------------------
+// Subrecursos dentro del PUT completo de usuario (solo RRHH).
+// Regla: si el Id viene null o 0 => se crea un registro nuevo.
+//        si el Id viene con un valor existente => se edita ese registro
+//        (debe pertenecer al usuario que se está actualizando).
+// La baja se maneja aparte, con las listas "...AEliminar" (por Id).
+// ---------------------------------------------------------------------
+
+public class FamiliarActualizarDto
+{
+    public long? IdFamiliar { get; set; }
+
+    [Required(ErrorMessage = "El nombre del familiar es obligatorio.")]
+    [StringLength(50)]
+    public string Nombre { get; set; } = null!;
+
+    [StringLength(50)]
+    public string? Apellido { get; set; }
+
+    [StringLength(30)]
+    public string? Parentesco { get; set; }
+
+    public DateTime? FechaNacimiento { get; set; }
+}
+
+public class ContactoEmergenciaActualizarDto
+{
+    public long? IdContacto { get; set; }
+
+    [Required(ErrorMessage = "El nombre del contacto es obligatorio.")]
+    [StringLength(50)]
+    public string Nombre { get; set; } = null!;
+
+    [StringLength(50)]
+    public string? Apellido { get; set; }
+
+    [StringLength(30)]
+    public string? Parentesco { get; set; }
+
+    [StringLength(20)]
+    public string? Telefono { get; set; }
+
+    [StringLength(150)]
+    public string? Direccion { get; set; }
+}
+
+public class TituloActualizarDto
+{
+    public long? IdTitulo { get; set; }
+
+    [Required(ErrorMessage = "El nombre del título es obligatorio.")]
+    [StringLength(100)]
+    public string NombreTitulo { get; set; } = null!;
+
+    [StringLength(100)]
+    public string? Institucion { get; set; }
+
+    public DateTime? FechaObtencion { get; set; }
+}
+
+public class DatoBancarioActualizarDto
+{
+    public long? IdDatoBancario { get; set; }
+
+    [Required(ErrorMessage = "El banco es obligatorio.")]
+    public long IdBanco { get; set; }
+
+    [Required(ErrorMessage = "El tipo de cuenta es obligatorio.")]
+    [StringLength(20)]
+    public string TipoCuenta { get; set; } = null!;
+
+    [Required(ErrorMessage = "El número de cuenta es obligatorio.")]
+    [StringLength(30)]
+    public string NumeroCuenta { get; set; } = null!;
+}
+
 public class ActualizarUsuarioDto
 {
     [StringLength(50, ErrorMessage = "El nombre no puede superar los 50 caracteres.")]
@@ -25,9 +101,8 @@ public class ActualizarUsuarioDto
 
     public long? IdEstadoCivil { get; set; }
 
-    public long? IdArea { get; set; }
+    public long? IdEtnia { get; set; }
 
-    [Required(ErrorMessage = "El cargo es obligatorio.")]
     public long? IdCargo { get; set; }
 
     public long? IdCiudad { get; set; }
@@ -46,4 +121,16 @@ public class ActualizarUsuarioDto
     public bool? TieneVacaciones { get; set; }
 
     public int? DiasVacacionesAsignados { get; set; }
+
+    // --- Subrecursos: alta y edición (upsert por Id) ---
+    public List<FamiliarActualizarDto>? Familiares { get; set; }
+    public List<ContactoEmergenciaActualizarDto>? ContactosEmergencia { get; set; }
+    public List<TituloActualizarDto>? Titulos { get; set; }
+    public List<DatoBancarioActualizarDto>? DatosBancarios { get; set; }
+
+    // --- Subrecursos: baja (por Id) ---
+    public List<long>? FamiliaresAEliminar { get; set; }
+    public List<long>? ContactosEmergenciaAEliminar { get; set; }
+    public List<long>? TitulosAEliminar { get; set; }
+    public List<long>? DatosBancariosAEliminar { get; set; }
 }

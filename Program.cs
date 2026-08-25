@@ -25,7 +25,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendLocal", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("https://happypayintranet.netlify.app")
               .AllowAnyHeader()
               .AllowAnyMethod();
     });

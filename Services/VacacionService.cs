@@ -92,13 +92,12 @@ public class VacacionService : IVacacionService
             IdUsuario = dto.IdUsuario,
             IdRegistradoPor = idRegistradoPor,
             TipoMovimiento = "Descuento",
-            FechaInicio = dto.FechaInicio,
-            FechaFin = dto.FechaFin,
+            FechaInicio = DateTime.SpecifyKind(dto.FechaInicio, DateTimeKind.Utc),
+            FechaFin = DateTime.SpecifyKind(dto.FechaFin, DateTimeKind.Utc),
             DiasTomados = diasSolicitados,
             Observacion = dto.Motivo,
             Estado = true
         };
-
         _context.Vacaciones.Add(vacacion);
         await _context.SaveChangesAsync();
 

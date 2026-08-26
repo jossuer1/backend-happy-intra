@@ -40,7 +40,6 @@ public class Usuario
 
     // --- Beneficio de Vacaciones ---
     // No todos los colaboradores tienen derecho a vacaciones (ej. pasantes, honorarios).
-    // Si es false, DiasVacacionesAsignados se mantiene en 0 y el usuario no accede al módulo.
     public bool TieneVacaciones { get; set; } = true;
     public int DiasVacacionesAsignados { get; set; } = 15;
 
@@ -49,7 +48,7 @@ public class Usuario
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime FechaActualizacion { get; set; } = DateTime.UtcNow;
 
-    // --- Relaciones de Pertenencia y Navegación (Con ForeignKey explícito) ---
+    // --- Relaciones de Pertenencia 
     [ForeignKey(nameof(IdRol))]
     public virtual Rol? Rol { get; set; }
 

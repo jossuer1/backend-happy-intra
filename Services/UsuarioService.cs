@@ -61,9 +61,6 @@ public class UsuarioService : IUsuarioService
             IdEtnia = dto.IdEtnia,
             IdGenero = dto.IdGenero,
             DebeCambiarContrasena = true,
-
-            // Si el usuario no tiene el beneficio de vacaciones, los días asignados quedan en 0
-            // sin importar lo que se haya mandado en el DTO.
             TieneVacaciones = dto.TieneVacaciones,
             DiasVacacionesAsignados = dto.TieneVacaciones ? (dto.DiasVacacionesAsignados ?? 15) : 0,
 
@@ -169,6 +166,7 @@ public class UsuarioService : IUsuarioService
             .Include(u => u.ContactosEmergencia)
             .Include(u => u.Titulos)
             .Include(u => u.DatosBancarios)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(u => u.IdUsuario == id);
 
         if (usuario == null)

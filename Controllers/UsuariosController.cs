@@ -62,6 +62,7 @@ public class UsuariosController : ControllerBase
                 u.Apellido,
                 u.CorreoEmpresa,
                 Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                Area = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
                 u.Estado,
                 u.TieneVacaciones,

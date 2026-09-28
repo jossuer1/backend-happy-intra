@@ -397,4 +397,66 @@ public class CatalogosController : ControllerBase
         return Ok(new { mensaje = "Tipo de sangre desactivado correctamente." });
     }
 
+    // --- FORMULARIO DE PERFIL: todos los catálogos en una sola petición ---
+    [AllowAnonymous]
+    [HttpGet("formulario-perfil")]
+    public async Task<IActionResult> GetCatalogosFormularioPerfil()
+    {
+        var areas = await _context.Areas.AsNoTracking().ToListAsync();
+        var cargos = await _context.Cargos.AsNoTracking().ToListAsync();
+        var bancos = await _context.Bancos.AsNoTracking().ToListAsync();
+
+        var ciudades = await _context.Ciudades
+            .AsNoTracking()
+            .Select(c => new CiudadReadDto
+            {
+                IdCiudad = c.IdCiudad,
+                Nombre = c.Nombre,
+                IdProvincia = c.IdProvincia,
+                Estado = c.Estado,
+                Provincia = c.Provincia != null ? new ProvinciaSimpleDto
+                {
+                    IdProvincia = c.Provincia.IdProvincia,
+                    Nombre = c.Provincia.Nombre,
+                    IdRegion = c.Provincia.IdRegion
+                } : null
+            })
+            .ToListAsync();
+
+        var etnias = await _context.Etnias.AsNoTracking().Where(e => e.Estado).ToListAsync();
+        var estadosCiviles = await _context.EstadosCiviles.AsNoTracking().Where(e => e.Estado).ToListAsync();
+        var generos = await _context.Generos.AsNoTracking().Where(g => g.Estado).ToListAsync();
+
+        var tiposSangre = await _context.TiposSangre
+            .AsNoTracking()
+            .Where(t => t.Estado)
+            .Select(t => new TipoSangreReadDto
+            {
+                IdTipoSangre = t.IdTipoSangre,
+                Nombre = t.Nombre,
+                Estado = t.Estado
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            areas,
+            cargos,
+            bancos,
+            ciudades,
+            etnias,
+            estadosCiviles,
+            generos,
+            tiposSangre,
+            // No consulta la BD: son las listas fijas de Models/OpcionesFijas.cs
+            opcionesFijas = new
+            {
+                tiposContrato = TiposContrato.Todos,
+                tiposContratoConFechaFin = TiposContrato.ConFechaFin,
+                jornadas = Jornadas.Todas,
+                parentescosFamiliar = Parentescos.Todos
+            }
+        });
+    }
+
 }

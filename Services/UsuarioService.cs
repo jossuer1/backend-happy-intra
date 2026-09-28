@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
+using Intranet.Helpers;
 using Microsoft.Extensions.Configuration;
 
 namespace Intranet.Services;
@@ -24,6 +25,50 @@ public class UsuarioService : IUsuarioService
 
     public async Task<ServiceResult<UsuarioCreadoDto>> CrearUsuarioAsync(CrearUsuarioDto dto)
     {
+        // 0. Normalización: cédula/celulares solo se recortan; nombres y textos "de orden"
+        //    se guardan en MAYÚSCULAS; los correos en minúsculas (para no duplicar cuentas
+        //    por diferencias de mayúsculas/minúsculas).
+        dto.Cedula = TextoHelper.SoloTrim(dto.Cedula)!;
+        dto.Nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+        dto.Apellido = TextoHelper.AMayusculasObligatorio(dto.Apellido);
+        dto.CorreoEmpresa = TextoHelper.AEmailNormalizado(dto.CorreoEmpresa);
+        dto.CorreoPersonal = TextoHelper.AEmailNormalizado(dto.CorreoPersonal);
+        dto.CelularPersonal = TextoHelper.SoloTrim(dto.CelularPersonal);
+        dto.CelularEmpresa = TextoHelper.SoloTrim(dto.CelularEmpresa);
+        dto.Direccion = TextoHelper.AMayusculas(dto.Direccion);
+
+        if (dto.Familiares != null)
+            foreach (var f in dto.Familiares)
+            {
+                f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
+                f.Apellido = TextoHelper.AMayusculas(f.Apellido);
+                f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+            }
+
+        if (dto.ContactosEmergencia != null)
+            foreach (var c in dto.ContactosEmergencia)
+            {
+                c.Nombre = TextoHelper.AMayusculasObligatorio(c.Nombre);
+                c.Apellido = TextoHelper.AMayusculas(c.Apellido);
+                c.Parentesco = TextoHelper.AMayusculas(c.Parentesco);
+                c.Telefono = TextoHelper.SoloTrim(c.Telefono);
+                c.Direccion = TextoHelper.AMayusculas(c.Direccion);
+            }
+
+        if (dto.DatosBancarios != null)
+            foreach (var b in dto.DatosBancarios)
+            {
+                b.TipoCuenta = TextoHelper.AMayusculasObligatorio(b.TipoCuenta);
+                b.NumeroCuenta = TextoHelper.SoloTrim(b.NumeroCuenta)!;
+            }
+
+        if (dto.Titulos != null)
+            foreach (var t in dto.Titulos)
+            {
+                t.NombreTitulo = TextoHelper.AMayusculasObligatorio(t.NombreTitulo);
+                t.Institucion = TextoHelper.AMayusculasObligatorio(t.Institucion);
+            }
+
         // 1. Validaciones de negocio
         if (await _context.Usuarios.AnyAsync(u => u.Cedula == dto.Cedula))
             return ServiceResult<UsuarioCreadoDto>.Fallo("La cédula/usuario ingresado ya se encuentra registrado.");
@@ -33,6 +78,14 @@ public class UsuarioService : IUsuarioService
 
         if (await _context.Usuarios.AnyAsync(u => u.CorreoPersonal == dto.CorreoPersonal))
             return ServiceResult<UsuarioCreadoDto>.Fallo("El correo personal ya está registrado.");
+
+        if (dto.IdTipoSangre.HasValue &&
+            !await _context.TiposSangre.AnyAsync(t => t.IdTipoSangre == dto.IdTipoSangre.Value && t.Estado))
+            return ServiceResult<UsuarioCreadoDto>.Fallo("El tipo de sangre indicado no es válido.");
+
+        if (dto.IdJefeDirecto.HasValue &&
+            !await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado))
+            return ServiceResult<UsuarioCreadoDto>.Fallo("El jefe directo indicado no existe o está inactivo.");
 
         // 2. Generar y hashear contraseña temporal
         string claveTemporal = GenerarContrasenaAleatoria(10);
@@ -60,6 +113,8 @@ public class UsuarioService : IUsuarioService
             IdEstadoCivil = dto.IdEstadoCivil,
             IdEtnia = dto.IdEtnia,
             IdGenero = dto.IdGenero,
+            IdTipoSangre = dto.IdTipoSangre,
+            IdJefeDirecto = dto.IdJefeDirecto,
             DebeCambiarContrasena = true,
             TieneVacaciones = dto.TieneVacaciones,
             DiasVacacionesAsignados = dto.TieneVacaciones ? (dto.DiasVacacionesAsignados ?? 15) : 0,
@@ -172,6 +227,48 @@ public class UsuarioService : IUsuarioService
         if (usuario == null)
             return ServiceResult<bool>.Fallo("Usuario no encontrado.");
 
+        // --- Normalización de lo que venga informado ---
+        dto.Cedula = TextoHelper.SoloTrim(dto.Cedula);
+        dto.Nombre = TextoHelper.AMayusculas(dto.Nombre);
+        dto.Apellido = TextoHelper.AMayusculas(dto.Apellido);
+        dto.CorreoEmpresa = dto.CorreoEmpresa != null ? TextoHelper.AEmailNormalizado(dto.CorreoEmpresa) : null;
+        dto.CorreoPersonal = dto.CorreoPersonal != null ? TextoHelper.AEmailNormalizado(dto.CorreoPersonal) : null;
+        dto.CelularEmpresa = TextoHelper.SoloTrim(dto.CelularEmpresa);
+        dto.CelularPersonal = TextoHelper.SoloTrim(dto.CelularPersonal);
+        dto.Direccion = TextoHelper.AMayusculas(dto.Direccion);
+
+        if (dto.Familiares != null)
+            foreach (var f in dto.Familiares)
+            {
+                f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
+                f.Apellido = TextoHelper.AMayusculas(f.Apellido);
+                f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+            }
+
+        if (dto.ContactosEmergencia != null)
+            foreach (var c in dto.ContactosEmergencia)
+            {
+                c.Nombre = TextoHelper.AMayusculasObligatorio(c.Nombre);
+                c.Apellido = TextoHelper.AMayusculas(c.Apellido);
+                c.Parentesco = TextoHelper.AMayusculas(c.Parentesco);
+                c.Telefono = TextoHelper.SoloTrim(c.Telefono);
+                c.Direccion = TextoHelper.AMayusculas(c.Direccion);
+            }
+
+        if (dto.Titulos != null)
+            foreach (var t in dto.Titulos)
+            {
+                t.NombreTitulo = TextoHelper.AMayusculasObligatorio(t.NombreTitulo);
+                t.Institucion = TextoHelper.AMayusculas(t.Institucion);
+            }
+
+        if (dto.DatosBancarios != null)
+            foreach (var b in dto.DatosBancarios)
+            {
+                b.TipoCuenta = TextoHelper.AMayusculasObligatorio(b.TipoCuenta);
+                b.NumeroCuenta = TextoHelper.SoloTrim(b.NumeroCuenta)!;
+            }
+
         // --- Unicidad si cambian cédula o correos ---
         if (dto.Cedula != null && dto.Cedula != usuario.Cedula &&
             await _context.Usuarios.AnyAsync(u => u.Cedula == dto.Cedula && u.IdUsuario != id))
@@ -188,6 +285,19 @@ public class UsuarioService : IUsuarioService
         if (dto.TieneVacaciones == true && dto.DiasVacacionesAsignados.HasValue && dto.DiasVacacionesAsignados.Value < 0)
             return ServiceResult<bool>.Fallo("Los días de vacaciones asignados no pueden ser negativos.");
 
+        if (dto.IdTipoSangre.HasValue &&
+            !await _context.TiposSangre.AnyAsync(t => t.IdTipoSangre == dto.IdTipoSangre.Value && t.Estado))
+            return ServiceResult<bool>.Fallo("El tipo de sangre indicado no es válido.");
+
+        if (dto.IdJefeDirecto.HasValue)
+        {
+            if (dto.IdJefeDirecto.Value == id)
+                return ServiceResult<bool>.Fallo("Un usuario no puede ser jefe directo de sí mismo.");
+
+            if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado))
+                return ServiceResult<bool>.Fallo("El jefe directo indicado no existe o está inactivo.");
+        }
+
         // --- Campos escalares (solo se tocan los que vienen informados) ---
         if (dto.Nombre != null) usuario.Nombre = dto.Nombre;
         if (dto.Apellido != null) usuario.Apellido = dto.Apellido;
@@ -200,6 +310,8 @@ public class UsuarioService : IUsuarioService
         if (dto.IdEtnia.HasValue) usuario.IdEtnia = dto.IdEtnia.Value;
         if (dto.IdCargo.HasValue) usuario.IdCargo = dto.IdCargo.Value;
         if (dto.IdCiudad.HasValue) usuario.IdCiudad = dto.IdCiudad.Value;
+        if (dto.IdTipoSangre.HasValue) usuario.IdTipoSangre = dto.IdTipoSangre.Value;
+        if (dto.IdJefeDirecto.HasValue) usuario.IdJefeDirecto = dto.IdJefeDirecto.Value;
         if (dto.FechaIngreso.HasValue) usuario.FechaIngreso = dto.FechaIngreso.Value;
         if (dto.CelularEmpresa != null) usuario.CelularEmpresa = dto.CelularEmpresa;
         if (dto.CelularPersonal != null) usuario.CelularPersonal = dto.CelularPersonal;
@@ -377,6 +489,169 @@ public class UsuarioService : IUsuarioService
             }
         }
 
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    // RRHH habilita (o revoca) la ventana de autoedición de perfil de un empleado.
+    public async Task<ServiceResult<bool>> ActualizarPermisoPerfilAsync(long id, bool habilitar)
+    {
+        var usuario = await _context.Usuarios.FindAsync(id);
+        if (usuario == null)
+            return ServiceResult<bool>.Fallo("Usuario no encontrado.");
+
+        usuario.PuedeActualizarPerfil = habilitar;
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    // RRHH activa o desactiva la cuenta de un usuario. Un usuario inactivo no
+    // puede iniciar sesión ni cambiar su contraseña (ver AuthService.LoginAsync
+    // y CambiarContrasenaAsync). Al desactivar, además se le revoca cualquier
+    // ventana de autoedición de perfil que tuviera pendiente.
+    public async Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar)
+    {
+        var usuario = await _context.Usuarios.FindAsync(id);
+        if (usuario == null)
+            return ServiceResult<bool>.Fallo("Usuario no encontrado.");
+
+        usuario.Estado = activar;
+        if (!activar)
+            usuario.PuedeActualizarPerfil = false;
+
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<bool>.Ok(true);
+    }
+
+    // El propio usuario edita su información, solo si RRHH le habilitó el
+    // permiso. Es un permiso "de un solo uso": se consume automáticamente
+    // al guardar con éxito, para que el usuario no quede con edición libre
+    // permanente y RRHH deba volver a habilitarla cada vez que haga falta.
+    public async Task<ServiceResult<bool>> ActualizarPerfilPropioAsync(long idUsuario, ActualizarPerfilPropioDto dto)
+    {
+        var usuario = await _context.Usuarios
+            .Include(u => u.Familiares)
+            .Include(u => u.ContactosEmergencia)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(u => u.IdUsuario == idUsuario);
+
+        if (usuario == null)
+            return ServiceResult<bool>.Fallo("Usuario no encontrado.");
+
+        if (!usuario.PuedeActualizarPerfil)
+            return ServiceResult<bool>.Fallo(
+                "No tienes habilitada la edición de tu perfil en este momento. Pídele a RRHH que la active.");
+
+        // --- Normalización (mismas reglas que en el resto del sistema) ---
+        dto.CelularEmpresa = TextoHelper.SoloTrim(dto.CelularEmpresa);
+        dto.CelularPersonal = TextoHelper.SoloTrim(dto.CelularPersonal);
+        dto.Direccion = TextoHelper.AMayusculas(dto.Direccion);
+
+        if (dto.CelularEmpresa != null) usuario.CelularEmpresa = dto.CelularEmpresa;
+        if (dto.CelularPersonal != null) usuario.CelularPersonal = dto.CelularPersonal;
+        if (dto.Direccion != null) usuario.Direccion = dto.Direccion;
+        if (dto.UrlImagenPerfil != null) usuario.UrlImagenPerfil = dto.UrlImagenPerfil;
+
+        // --- Familiares (mismo upsert por Id que usa RRHH) ---
+        if (dto.FamiliaresAEliminar is { Count: > 0 })
+        {
+            var aEliminar = usuario.Familiares.Where(f => dto.FamiliaresAEliminar.Contains(f.IdFamiliar)).ToList();
+            foreach (var f in aEliminar)
+            {
+                usuario.Familiares.Remove(f);
+                _context.Remove(f);
+            }
+        }
+
+        if (dto.Familiares is { Count: > 0 })
+        {
+            foreach (var f in dto.Familiares)
+            {
+                f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
+                f.Apellido = TextoHelper.AMayusculas(f.Apellido);
+                f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+
+                if (f.IdFamiliar is long idF && idF > 0)
+                {
+                    var existente = usuario.Familiares.FirstOrDefault(x => x.IdFamiliar == idF);
+                    if (existente == null)
+                        return ServiceResult<bool>.Fallo($"El familiar con id {idF} no te pertenece.");
+
+                    existente.Nombre = f.Nombre;
+                    existente.Apellido = f.Apellido;
+                    existente.Parentesco = f.Parentesco;
+                    existente.FechaNacimiento = f.FechaNacimiento;
+                }
+                else
+                {
+                    usuario.Familiares.Add(new Familiar
+                    {
+                        Nombre = f.Nombre,
+                        Apellido = f.Apellido,
+                        Parentesco = f.Parentesco,
+                        FechaNacimiento = f.FechaNacimiento,
+                        Estado = true
+                    });
+                }
+            }
+        }
+
+        // --- Contactos de emergencia (mismo upsert por Id que usa RRHH) ---
+        if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
+        {
+            var aEliminar = usuario.ContactosEmergencia.Where(c => dto.ContactosEmergenciaAEliminar.Contains(c.IdContacto)).ToList();
+            foreach (var c in aEliminar)
+            {
+                usuario.ContactosEmergencia.Remove(c);
+                _context.Remove(c);
+            }
+        }
+
+        if (dto.ContactosEmergencia is { Count: > 0 })
+        {
+            foreach (var c in dto.ContactosEmergencia)
+            {
+                c.Nombre = TextoHelper.AMayusculasObligatorio(c.Nombre);
+                c.Apellido = TextoHelper.AMayusculas(c.Apellido);
+                c.Parentesco = TextoHelper.AMayusculas(c.Parentesco);
+                c.Telefono = TextoHelper.SoloTrim(c.Telefono);
+                c.Direccion = TextoHelper.AMayusculas(c.Direccion);
+
+                if (c.IdContacto is long idC && idC > 0)
+                {
+                    var existente = usuario.ContactosEmergencia.FirstOrDefault(x => x.IdContacto == idC);
+                    if (existente == null)
+                        return ServiceResult<bool>.Fallo($"El contacto de emergencia con id {idC} no te pertenece.");
+
+                    existente.Nombre = c.Nombre;
+                    existente.Apellido = c.Apellido;
+                    existente.Parentesco = c.Parentesco;
+                    existente.Telefono = c.Telefono;
+                    existente.Direccion = c.Direccion;
+                }
+                else
+                {
+                    usuario.ContactosEmergencia.Add(new ContactoEmergencia
+                    {
+                        Nombre = c.Nombre,
+                        Apellido = c.Apellido,
+                        Parentesco = c.Parentesco,
+                        Telefono = c.Telefono,
+                        Direccion = c.Direccion,
+                        Estado = true
+                    });
+                }
+            }
+        }
+
+        // El permiso se consume: vuelve a quedar en false hasta que RRHH lo reactive.
+        usuario.PuedeActualizarPerfil = false;
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 

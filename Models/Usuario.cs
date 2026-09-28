@@ -17,6 +17,11 @@ public class Usuario
     public long? IdEstadoCivil { get; set; }
     public long? IdEtnia { get; set; }
     public long? IdGenero { get; set; }
+    public long? IdTipoSangre { get; set; }
+
+    // Jefe directo del empleado: quien resuelve el primer nivel de sus
+    // solicitudes de vacaciones antes de que pasen a RRHH.
+    public long? IdJefeDirecto { get; set; }
 
     // --- Propiedades Escalares ---
     public string Cedula { get; set; } = null!;
@@ -35,6 +40,12 @@ public class Usuario
 
     public string ContrasenaHash { get; set; } = null!;
     public bool DebeCambiarContrasena { get; set; } = true;
+
+    // Ventana de autoedición: por defecto el usuario NO puede tocar su propio
+    // perfil (todo pasa por RRHH). RRHH la activa puntualmente (PATCH
+    // /api/Usuarios/{id}/permiso-actualizacion) para que el empleado pueda
+    // editar sus propios datos una vez; al guardar, se vuelve a desactivar sola.
+    public bool PuedeActualizarPerfil { get; set; } = false;
 
     public string? UrlImagenPerfil { get; set; }
 
@@ -67,6 +78,15 @@ public class Usuario
     [ForeignKey(nameof(IdGenero))]
     public virtual Genero? Genero { get; set; }
 
+    [ForeignKey(nameof(IdTipoSangre))]
+    public virtual TipoSangre? TipoSangre { get; set; }
+
+    [ForeignKey(nameof(IdJefeDirecto))]
+    public virtual Usuario? JefeDirecto { get; set; }
+
+    // Empleados que reportan directamente a este usuario.
+    public virtual ICollection<Usuario> Subordinados { get; set; } = new List<Usuario>();
+
     // --- Relaciones de Colecciones ---
     public virtual ICollection<Familiar> Familiares { get; set; } = new List<Familiar>();
     public virtual ICollection<ContactoEmergencia> ContactosEmergencia { get; set; } = new List<ContactoEmergencia>();
@@ -74,4 +94,5 @@ public class Usuario
     public virtual ICollection<Titulo> Titulos { get; set; } = new List<Titulo>();
     public virtual ICollection<Vacacion> VacacionesRecibidas { get; set; } = new List<Vacacion>();
     public virtual ICollection<Vacacion> VacacionesRegistradas { get; set; } = new List<Vacacion>();
+    public virtual ICollection<SolicitudVacacion> SolicitudesVacaciones { get; set; } = new List<SolicitudVacacion>();
 }

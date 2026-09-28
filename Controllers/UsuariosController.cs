@@ -64,7 +64,8 @@ public class UsuariosController : ControllerBase
                 Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
                 u.Estado,
-                u.TieneVacaciones
+                u.TieneVacaciones,
+                u.PuedeActualizarPerfil
             })
             .ToListAsync();
 
@@ -103,6 +104,7 @@ public class UsuariosController : ControllerBase
             DiasVacacionesAsignados = u.DiasVacacionesAsignados,
             Estado = u.Estado,
             Rol = u.Rol != null ? u.Rol.Nombre : null,
+            PuedeActualizarPerfil = u.PuedeActualizarPerfil,
 
             // --- ASIGNAR LOS IDs DE FORMA DIRECTA ---
             IdCargo = u.IdCargo,
@@ -110,6 +112,8 @@ public class UsuariosController : ControllerBase
             IdGenero = u.IdGenero,
             IdEstadoCivil = u.IdEstadoCivil,
             IdEtnia = u.IdEtnia,
+            IdTipoSangre = u.IdTipoSangre,
+            IdJefeDirecto = u.IdJefeDirecto,
 
             Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
             Departamento = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
@@ -117,6 +121,8 @@ public class UsuariosController : ControllerBase
             Genero = u.Genero != null ? u.Genero.Nombre : null,
             EstadoCivil = u.EstadoCivil != null ? u.EstadoCivil.Nombre : null,
             Etnia = u.Etnia != null ? u.Etnia.Nombre : null,
+            TipoSangre = u.TipoSangre != null ? u.TipoSangre.Nombre : null,
+            JefeDirecto = u.JefeDirecto != null ? u.JefeDirecto.Nombre + " " + u.JefeDirecto.Apellido : null,
 
             Familiares = u.Familiares.Select(f => new FamiliarDto
             {
@@ -206,6 +212,61 @@ public class UsuariosController : ControllerBase
             return BadRequest(new { mensaje = resultado.Mensaje });
 
         return Ok(resultado.Data);
+    }
+
+    // Solo RRHH: activa o desactiva la cuenta de un usuario. Un usuario
+    // desactivado no puede iniciar sesión ni cambiar su contraseña.
+    [HttpPatch("{id}/estado")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ActualizarEstado(long id, [FromBody] ActualizarEstadoUsuarioDto dto)
+    {
+        var resultado = await _usuarioService.ActualizarEstadoAsync(id, dto.Activar);
+
+        if (!resultado.Exito)
+            return NotFound(new { mensaje = resultado.Mensaje });
+
+        return Ok(new
+        {
+            mensaje = dto.Activar
+                ? "Usuario activado correctamente."
+                : "Usuario desactivado correctamente."
+        });
+    }
+
+    // Solo RRHH: habilita (o revoca) que el propio empleado pueda editar su
+    // perfil una vez, vía PUT /api/Usuarios/mi-perfil. El permiso se consume
+    // automáticamente al primer guardado exitoso del empleado.
+    [HttpPatch("{id}/permiso-actualizacion")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ActualizarPermisoPerfil(long id, [FromBody] PermisoActualizarPerfilDto dto)
+    {
+        var resultado = await _usuarioService.ActualizarPermisoPerfilAsync(id, dto.Habilitar);
+
+        if (!resultado.Exito)
+            return NotFound(new { mensaje = resultado.Mensaje });
+
+        return Ok(new
+        {
+            mensaje = dto.Habilitar
+                ? "Se habilitó la edición de perfil para este usuario."
+                : "Se deshabilitó la edición de perfil para este usuario."
+        });
+    }
+
+    // El empleado logueado edita su propia información de contacto, familiares
+    // y contactos de emergencia, solo si RRHH le habilitó el permiso. No requiere
+    // rol RRHH: cualquier usuario autenticado puede llamarlo, pero solo surte
+    // efecto si PuedeActualizarPerfil está en true (lo valida el service).
+    [HttpPut("mi-perfil")]
+    public async Task<IActionResult> ActualizarMiPerfil([FromBody] ActualizarPerfilPropioDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _usuarioService.ActualizarPerfilPropioAsync(currentUserId, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(new { mensaje = "Perfil actualizado exitosamente." });
     }
 
     // Sube/reemplaza la foto de perfil en Cloudinary y guarda la URL resultante.

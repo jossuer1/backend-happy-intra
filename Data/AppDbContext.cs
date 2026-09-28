@@ -20,7 +20,9 @@ public class AppDbContext : DbContext
     public DbSet<Etnia> Etnias { get; set; }
     public DbSet<Genero> Generos { get; set; }
     public DbSet<EstadoCivil> EstadosCiviles { get; set; }
+    public DbSet<TipoSangre> TiposSangre { get; set; }
     public DbSet<Vacacion> Vacaciones { get; set; }
+    public DbSet<SolicitudVacacion> SolicitudesVacaciones { get; set; }
     public DbSet<Imagen> Imagen { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -38,6 +40,53 @@ public class AppDbContext : DbContext
         .WithMany(u => u.VacacionesRegistradas)
         .HasForeignKey(v => v.IdRegistradoPor)
         .OnDelete(DeleteBehavior.Restrict);
+
+        // Jerarquía (jefe directo): autorreferencia en Usuarios. Restrict para
+        // no arrastrar un borrado en cascada de un jefe sobre sus subordinados.
+        modelBuilder.Entity<Usuario>()
+        .HasOne(u => u.JefeDirecto)
+        .WithMany(u => u.Subordinados)
+        .HasForeignKey(u => u.IdJefeDirecto)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        // Solicitudes de vacaciones: tres relaciones distintas hacia Usuario
+        // (solicitante, jefe aprobador, RRHH aprobador). Todas Restrict para
+        // evitar ambigüedad de borrado en cascada entre ellas.
+        modelBuilder.Entity<SolicitudVacacion>()
+        .HasOne(s => s.Usuario)
+        .WithMany(u => u.SolicitudesVacaciones)
+        .HasForeignKey(s => s.IdUsuario)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SolicitudVacacion>()
+        .HasOne(s => s.JefeAprobador)
+        .WithMany()
+        .HasForeignKey(s => s.IdJefeAprobador)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SolicitudVacacion>()
+        .HasOne(s => s.RrhhAprobador)
+        .WithMany()
+        .HasForeignKey(s => s.IdRrhhAprobador)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SolicitudVacacion>()
+        .HasOne(s => s.VacacionGenerada)
+        .WithMany()
+        .HasForeignKey(s => s.IdVacacionGenerada)
+        .OnDelete(DeleteBehavior.Restrict);
+
+        // Catálogo de tipos de sangre (solo lectura pública; altas/bajas exclusivas de ADMIN)
+        modelBuilder.Entity<TipoSangre>().HasData(
+            new TipoSangre { IdTipoSangre = 1, Nombre = "O+" },
+            new TipoSangre { IdTipoSangre = 2, Nombre = "O-" },
+            new TipoSangre { IdTipoSangre = 3, Nombre = "A+" },
+            new TipoSangre { IdTipoSangre = 4, Nombre = "A-" },
+            new TipoSangre { IdTipoSangre = 5, Nombre = "B+" },
+            new TipoSangre { IdTipoSangre = 6, Nombre = "B-" },
+            new TipoSangre { IdTipoSangre = 7, Nombre = "AB+" },
+            new TipoSangre { IdTipoSangre = 8, Nombre = "AB-" }
+        );
 
         // 1. Áreas Únicas
         modelBuilder.Entity<Area>().HasData(

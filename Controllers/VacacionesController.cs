@@ -121,4 +121,99 @@ public class VacacionesController : ControllerBase
 
         return Ok(new { mensaje = "Movimiento de vacaciones anulado correctamente." });
     }
+
+    // ============================================================
+    // Solicitudes de vacaciones: el empleado solicita, primero responde
+    // su jefe directo y, si aprueba, RRHH da el visto bueno final.
+    // ============================================================
+
+    // 8. El empleado logueado crea una solicitud de vacaciones.
+    [HttpPost("solicitudes")]
+    public async Task<IActionResult> CrearSolicitud([FromBody] SolicitudVacacionCrearDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.CrearSolicitudAsync(currentUserId, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
+
+    // 9. El empleado logueado ve el estado de todas sus propias solicitudes.
+    [HttpGet("solicitudes/mis-solicitudes")]
+    public async Task<IActionResult> ObtenerMisSolicitudes()
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.ObtenerMisSolicitudesAsync(currentUserId);
+        return Ok(resultado.Data);
+    }
+
+    // 10. Cualquier usuario que sea jefe directo de alguien ve las solicitudes
+    // de sus subordinados que están esperando su respuesta. No requiere un rol
+    // especial: "ser jefe" es una relación (Usuario.IdJefeDirecto), no un rol.
+    [HttpGet("solicitudes/pendientes-jefe")]
+    public async Task<IActionResult> ObtenerPendientesParaJefe()
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.ObtenerPendientesParaJefeAsync(currentUserId);
+        return Ok(resultado.Data);
+    }
+
+    // 11. El jefe directo aprueba o rechaza la solicitud de un subordinado.
+    // Si aprueba, la solicitud pasa a RRHH; si rechaza, el flujo termina ahí.
+    [HttpPatch("solicitudes/{id}/jefe")]
+    public async Task<IActionResult> ResponderComoJefe(long id, [FromBody] RespuestaSolicitudVacacionDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.ResponderComoJefeAsync(id, currentUserId, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
+
+    // 12. Exclusivo RRHH: solicitudes que el jefe ya aprobó y esperan el visto
+    // bueno final antes de descontar los días del saldo del empleado.
+    [HttpGet("solicitudes/pendientes-rrhh")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerPendientesParaRrhh()
+    {
+        var resultado = await _vacacionService.ObtenerPendientesParaRrhhAsync();
+        return Ok(resultado.Data);
+    }
+
+    // 13. Exclusivo RRHH: aprobación final. Si aprueba, se genera automáticamente
+    // el movimiento de descuento y se debitan los días del saldo del empleado.
+    [HttpPatch("solicitudes/{id}/rrhh")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ResponderComoRrhh(long id, [FromBody] RespuestaSolicitudVacacionDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _vacacionService.ResponderComoRrhhAsync(id, currentUserId, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
+
+    // 14. Genera (al vuelo, sin guardarla en ningún lado) la constancia en PDF
+    // de una solicitud ya aprobada. El propio empleado puede descargar la suya;
+    // RRHH puede descargar la de cualquiera. Cada llamada reconstruye el PDF
+    // desde cero con los datos más recientes.
+    [HttpGet("solicitudes/{id}/constancia")]
+    public async Task<IActionResult> GenerarConstancia(long id)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var esRrhh = User.IsInRole("RRHH");
+
+        var resultado = await _vacacionService.GenerarConstanciaAsync(id, currentUserId, esRrhh);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return File(resultado.Data!, "application/pdf", $"constancia-vacaciones-{id}.pdf");
+    }
 }

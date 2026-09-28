@@ -3,11 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
+using Intranet.Helpers;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Intranet.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+// Lectura disponible para cualquier usuario autenticado (p.ej. combos de la app);
+// alta/edición/baja de roles y asignación de roles a usuarios es exclusiva de ADMIN.
+[Authorize]
 public class RolesController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -52,15 +57,18 @@ public class RolesController : ControllerBase
 
     // POST: api/Roles
     [HttpPost]
+    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> CrearRol([FromBody] RolCrearDto dto)
     {
-        var existeRol = await _context.Roles.AnyAsync(r => r.Nombre.ToLower() == dto.Nombre.ToLower());
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        var existeRol = await _context.Roles.AnyAsync(r => r.Nombre == nombre);
         if (existeRol)
             return BadRequest(new { mensaje = "El rol ingresado ya existe." });
 
         var rol = new Rol
         {
-            Nombre = dto.Nombre,
+            Nombre = nombre,
             Estado = true
         };
 
@@ -72,13 +80,19 @@ public class RolesController : ControllerBase
 
     // PUT: api/Roles/5
     [HttpPut("{id}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> ActualizarRol(long id, [FromBody] RolActualizarDto dto)
     {
         var rol = await _context.Roles.FindAsync(id);
         if (rol == null)
             return NotFound(new { mensaje = "Rol no encontrado." });
 
-        rol.Nombre = dto.Nombre;
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Roles.AnyAsync(r => r.Nombre == nombre && r.IdRol != id))
+            return BadRequest(new { mensaje = "Ya existe otro rol con ese nombre." });
+
+        rol.Nombre = nombre;
         rol.Estado = dto.Estado;
 
         await _context.SaveChangesAsync();
@@ -87,6 +101,7 @@ public class RolesController : ControllerBase
 
     // DELETE: api/Roles/5 (Baja lógica)
     [HttpDelete("{id}")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> EliminarRol(long id)
     {
         var rol = await _context.Roles.FindAsync(id);
@@ -101,6 +116,7 @@ public class RolesController : ControllerBase
 
     // POST: api/Roles/asignar-usuario
     [HttpPost("asignar-usuario")]
+    [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> AsignarRolAUsuario([FromBody] AsignarRolUsuarioDto dto)
     {
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);

@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
 using Intranet.DTOs;
+using Intranet.Models;
+using Intranet.Helpers;
+using Intranet.Services.Documentos;
 
 namespace Intranet.Services;
 
@@ -242,4 +245,235 @@ public class VacacionService : IVacacionService
             RegistradoPorNombre = $"{v.RegistradoPor.Nombre} {v.RegistradoPor.Apellido}"
         };
     }
+
+    // ============================================================
+    // Solicitudes de vacaciones: empleado -> jefe directo -> RRHH
+    // ============================================================
+
+    public async Task<ServiceResult<SolicitudVacacionDto>> CrearSolicitudAsync(long idUsuario, SolicitudVacacionCrearDto dto)
+    {
+        var usuario = await _context.Usuarios.FindAsync(idUsuario);
+        if (usuario == null)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Usuario no encontrado.");
+
+        if (!usuario.TieneVacaciones)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("No tienes el beneficio de vacaciones habilitado.");
+
+        if (usuario.IdJefeDirecto == null)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(
+                "No tienes un jefe directo asignado. Pide a RRHH que lo configure antes de solicitar vacaciones.");
+
+        if (dto.FechaFin.Date < dto.FechaInicio.Date)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de fin no puede ser anterior a la fecha de inicio.");
+
+        if (dto.FechaInicio.Date < DateTime.UtcNow.Date)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de inicio no puede ser una fecha pasada.");
+
+        var fechaInicioUtc = DateTime.SpecifyKind(dto.FechaInicio.Date, DateTimeKind.Utc);
+        var fechaFinUtc = DateTime.SpecifyKind(dto.FechaFin.Date, DateTimeKind.Utc);
+
+        // Días calendario, inclusivo (mismo criterio que el descuento directo de RRHH)
+        int diasSolicitados = (fechaFinUtc - fechaInicioUtc).Days + 1;
+
+        var saldoResult = await ObtenerSaldoAsync(idUsuario);
+        if (!saldoResult.Exito)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(saldoResult.Mensaje!);
+
+        if (diasSolicitados > saldoResult.Data!.DiasDisponibles)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(
+                $"No tienes días suficientes. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {diasSolicitados}.");
+
+        // Evita duplicar una solicitud sobre un rango que ya está en trámite o aprobado.
+        bool yaExisteEnRango = await _context.SolicitudesVacaciones.AnyAsync(s =>
+            s.IdUsuario == idUsuario &&
+            s.Estado != EstadoSolicitudVacacion.RechazadaJefe &&
+            s.Estado != EstadoSolicitudVacacion.RechazadaRrhh &&
+            s.FechaInicio.Date <= fechaFinUtc &&
+            s.FechaFin.Date >= fechaInicioUtc);
+
+        if (yaExisteEnRango)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(
+                "Ya tienes una solicitud en trámite o aprobada que se cruza con ese rango de fechas.");
+
+        var solicitud = new SolicitudVacacion
+        {
+            IdUsuario = idUsuario,
+            FechaInicio = fechaInicioUtc,
+            FechaFin = fechaFinUtc,
+            DiasSolicitados = diasSolicitados,
+            Motivo = dto.Motivo,
+            Estado = EstadoSolicitudVacacion.PendienteJefe,
+            IdJefeAprobador = usuario.IdJefeDirecto,
+            FechaSolicitud = DateTime.UtcNow
+        };
+
+        _context.SolicitudesVacaciones.Add(solicitud);
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
+    }
+
+    public async Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerMisSolicitudesAsync(long idUsuario)
+    {
+        var solicitudes = await ConsultaSolicitudesConIncludes()
+            .Where(s => s.IdUsuario == idUsuario)
+            .OrderByDescending(s => s.FechaSolicitud)
+            .ToListAsync();
+
+        return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
+    }
+
+    public async Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerPendientesParaJefeAsync(long idJefe)
+    {
+        var solicitudes = await ConsultaSolicitudesConIncludes()
+            .Where(s => s.IdJefeAprobador == idJefe && s.Estado == EstadoSolicitudVacacion.PendienteJefe)
+            .OrderBy(s => s.FechaSolicitud)
+            .ToListAsync();
+
+        return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
+    }
+
+    public async Task<ServiceResult<SolicitudVacacionDto>> ResponderComoJefeAsync(long idSolicitud, long idJefe, RespuestaSolicitudVacacionDto dto)
+    {
+        var solicitud = await _context.SolicitudesVacaciones.FindAsync(idSolicitud);
+        if (solicitud == null)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("La solicitud no existe.");
+
+        if (solicitud.IdJefeAprobador != idJefe)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("No tienes permiso para responder esta solicitud.");
+
+        if (solicitud.Estado != EstadoSolicitudVacacion.PendienteJefe)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Esta solicitud ya fue respondida y no puede modificarse.");
+
+        solicitud.Estado = dto.Aprobar ? EstadoSolicitudVacacion.PendienteRrhh : EstadoSolicitudVacacion.RechazadaJefe;
+        solicitud.FechaRespuestaJefe = DateTime.UtcNow;
+        solicitud.ObservacionJefe = dto.Observacion;
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
+    }
+
+    public async Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerPendientesParaRrhhAsync()
+    {
+        var solicitudes = await ConsultaSolicitudesConIncludes()
+            .Where(s => s.Estado == EstadoSolicitudVacacion.PendienteRrhh)
+            .OrderBy(s => s.FechaSolicitud)
+            .ToListAsync();
+
+        return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
+    }
+
+    public async Task<ServiceResult<SolicitudVacacionDto>> ResponderComoRrhhAsync(long idSolicitud, long idRrhh, RespuestaSolicitudVacacionDto dto)
+    {
+        var solicitud = await _context.SolicitudesVacaciones.FindAsync(idSolicitud);
+        if (solicitud == null)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("La solicitud no existe.");
+
+        if (solicitud.Estado != EstadoSolicitudVacacion.PendienteRrhh)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(
+                "Esta solicitud no está pendiente de aprobación de RRHH (aún no la aprueba el jefe, o ya fue resuelta).");
+
+        if (dto.Aprobar)
+        {
+            // Se vuelve a validar el saldo al momento de la aprobación final, por si
+            // hubo movimientos (ajustes, otras solicitudes) desde que se creó la solicitud.
+            var saldoResult = await ObtenerSaldoAsync(solicitud.IdUsuario);
+            if (!saldoResult.Exito)
+                return ServiceResult<SolicitudVacacionDto>.Fallo(saldoResult.Mensaje!);
+
+            if (solicitud.DiasSolicitados > saldoResult.Data!.DiasDisponibles)
+                return ServiceResult<SolicitudVacacionDto>.Fallo(
+                    $"El empleado ya no tiene saldo suficiente. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {solicitud.DiasSolicitados}.");
+
+            var vacacion = new Vacacion
+            {
+                IdUsuario = solicitud.IdUsuario,
+                IdRegistradoPor = idRrhh,
+                TipoMovimiento = "Descuento",
+                FechaInicio = solicitud.FechaInicio,
+                FechaFin = solicitud.FechaFin,
+                DiasTomados = solicitud.DiasSolicitados,
+                Observacion = $"Solicitud de vacaciones aprobada. Motivo: {solicitud.Motivo}",
+                Estado = true
+            };
+            _context.Vacaciones.Add(vacacion);
+            await _context.SaveChangesAsync(); // para obtener el Id generado
+
+            solicitud.IdVacacionGenerada = vacacion.IdVacacion;
+            solicitud.Estado = EstadoSolicitudVacacion.Aprobada;
+        }
+        else
+        {
+            solicitud.Estado = EstadoSolicitudVacacion.RechazadaRrhh;
+        }
+
+        solicitud.IdRrhhAprobador = idRrhh;
+        solicitud.FechaRespuestaRrhh = DateTime.UtcNow;
+        solicitud.ObservacionRrhh = dto.Observacion;
+
+        await _context.SaveChangesAsync();
+
+        return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
+    }
+
+    // Genera (sin guardar en ningún lado) la constancia en PDF de una solicitud
+    // ya aprobada. Se arma en memoria en cada llamada: nada se persiste ni en
+    // disco ni en base de datos, así que siempre refleja el estado más reciente.
+    public async Task<ServiceResult<byte[]>> GenerarConstanciaAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh)
+    {
+        var solicitud = await _context.SolicitudesVacaciones
+            .Include(s => s.Usuario)
+                .ThenInclude(u => u.Cargo)
+            .Include(s => s.JefeAprobador)
+            .Include(s => s.RrhhAprobador)
+            .FirstOrDefaultAsync(s => s.IdSolicitud == idSolicitud);
+
+        if (solicitud == null)
+            return ServiceResult<byte[]>.Fallo("La solicitud no existe.");
+
+        if (!esRrhh && solicitud.IdUsuario != idUsuarioQueConsulta)
+            return ServiceResult<byte[]>.Fallo("No tienes permiso para ver esta solicitud.");
+
+        if (solicitud.Estado != EstadoSolicitudVacacion.Aprobada)
+            return ServiceResult<byte[]>.Fallo(
+                "Solo se puede generar la constancia de una solicitud ya aprobada por completo (jefe y RRHH).");
+
+        // Informativo: el saldo actual del usuario para mostrarlo en el documento.
+        var saldoResult = await ObtenerSaldoAsync(solicitud.IdUsuario);
+
+        var pdf = ConstanciaVacacionesPdf.Generar(solicitud, saldoResult.Exito ? saldoResult.Data : null);
+        return ServiceResult<byte[]>.Ok(pdf);
+    }
+
+    private IQueryable<SolicitudVacacion> ConsultaSolicitudesConIncludes()
+        => _context.SolicitudesVacaciones
+            .Include(s => s.Usuario)
+            .Include(s => s.JefeAprobador)
+            .Include(s => s.RrhhAprobador);
+
+    private async Task<SolicitudVacacionDto> MapearSolicitudDtoAsync(long idSolicitud)
+    {
+        var s = await ConsultaSolicitudesConIncludes().FirstAsync(x => x.IdSolicitud == idSolicitud);
+        return MapearSolicitudDto(s);
+    }
+
+    private static SolicitudVacacionDto MapearSolicitudDto(SolicitudVacacion s) => new()
+    {
+        IdSolicitud = s.IdSolicitud,
+        IdUsuario = s.IdUsuario,
+        SolicitanteNombre = $"{s.Usuario.Nombre} {s.Usuario.Apellido}",
+        FechaInicio = s.FechaInicio,
+        FechaFin = s.FechaFin,
+        DiasSolicitados = s.DiasSolicitados,
+        Motivo = s.Motivo,
+        Estado = s.Estado,
+        JefeAprobadorNombre = s.JefeAprobador != null ? $"{s.JefeAprobador.Nombre} {s.JefeAprobador.Apellido}" : null,
+        FechaRespuestaJefe = s.FechaRespuestaJefe,
+        ObservacionJefe = s.ObservacionJefe,
+        RrhhAprobadorNombre = s.RrhhAprobador != null ? $"{s.RrhhAprobador.Nombre} {s.RrhhAprobador.Apellido}" : null,
+        FechaRespuestaRrhh = s.FechaRespuestaRrhh,
+        ObservacionRrhh = s.ObservacionRrhh,
+        FechaSolicitud = s.FechaSolicitud
+    };
 }

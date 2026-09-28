@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Intranet.Helpers;
 
 namespace Intranet.DTOs;
 
@@ -15,7 +16,8 @@ public class FamiliarActualizarDto
     public long? IdFamiliar { get; set; }
 
     [Required(ErrorMessage = "El nombre del familiar es obligatorio.")]
-    [StringLength(50)]
+    [NoSoloEspacios]
+    [StringLength(50, MinimumLength = 2)]
     public string Nombre { get; set; } = null!;
 
     [StringLength(50)]
@@ -32,7 +34,8 @@ public class ContactoEmergenciaActualizarDto
     public long? IdContacto { get; set; }
 
     [Required(ErrorMessage = "El nombre del contacto es obligatorio.")]
-    [StringLength(50)]
+    [NoSoloEspacios]
+    [StringLength(50, MinimumLength = 2)]
     public string Nombre { get; set; } = null!;
 
     [StringLength(50)]
@@ -53,7 +56,8 @@ public class TituloActualizarDto
     public long? IdTitulo { get; set; }
 
     [Required(ErrorMessage = "El nombre del título es obligatorio.")]
-    [StringLength(100)]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2)]
     public string NombreTitulo { get; set; } = null!;
 
     [StringLength(100)]
@@ -70,29 +74,37 @@ public class DatoBancarioActualizarDto
     public long IdBanco { get; set; }
 
     [Required(ErrorMessage = "El tipo de cuenta es obligatorio.")]
-    [StringLength(20)]
+    [NoSoloEspacios]
+    [StringLength(20, MinimumLength = 3)]
     public string TipoCuenta { get; set; } = null!;
 
     [Required(ErrorMessage = "El número de cuenta es obligatorio.")]
-    [StringLength(30)]
+    [NoSoloEspacios]
+    [RegularExpression(@"^[0-9]+$", ErrorMessage = "El número de cuenta solo puede contener dígitos.")]
+    [StringLength(30, MinimumLength = 3)]
     public string NumeroCuenta { get; set; } = null!;
 }
 
 public class ActualizarUsuarioDto
 {
-    [StringLength(50, ErrorMessage = "El nombre no puede superar los 50 caracteres.")]
+    [NoSoloEspacios]
+    [StringLength(50, MinimumLength = 2, ErrorMessage = "El nombre debe tener entre 2 y 50 caracteres.")]
     public string? Nombre { get; set; }
 
-    [StringLength(50, ErrorMessage = "El apellido no puede superar los 50 caracteres.")]
+    [NoSoloEspacios]
+    [StringLength(50, MinimumLength = 2, ErrorMessage = "El apellido debe tener entre 2 y 50 caracteres.")]
     public string? Apellido { get; set; }
 
     [StringLength(10, MinimumLength = 10, ErrorMessage = "La cédula debe tener exactamente 10 dígitos.")]
+    [RegularExpression(@"^\d{10}$", ErrorMessage = "La cédula debe contener únicamente 10 dígitos numéricos.")]
     public string? Cedula { get; set; }
 
     [EmailAddress(ErrorMessage = "El formato del correo empresarial no es válido.")]
+    [StringLength(100, ErrorMessage = "El correo empresarial no puede superar los 100 caracteres.")]
     public string? CorreoEmpresa { get; set; }
 
     [EmailAddress(ErrorMessage = "El formato del correo personal no es válido.")]
+    [StringLength(100, ErrorMessage = "El correo personal no puede superar los 100 caracteres.")]
     public string? CorreoPersonal { get; set; }
 
     public DateTime? FechaNacimiento { get; set; }
@@ -106,6 +118,10 @@ public class ActualizarUsuarioDto
     public long? IdCargo { get; set; }
 
     public long? IdCiudad { get; set; }
+
+    public long? IdTipoSangre { get; set; }
+
+    public long? IdJefeDirecto { get; set; }
 
     public DateTime? FechaIngreso { get; set; }
 
@@ -133,4 +149,47 @@ public class ActualizarUsuarioDto
     public List<long>? ContactosEmergenciaAEliminar { get; set; }
     public List<long>? TitulosAEliminar { get; set; }
     public List<long>? DatosBancariosAEliminar { get; set; }
+}
+
+// RRHH usa este DTO para habilitar/deshabilitar la ventana de autoedición
+// de perfil de un empleado (PATCH /api/Usuarios/{id}/permiso-actualizacion).
+public class PermisoActualizarPerfilDto
+{
+    public bool Habilitar { get; set; }
+}
+
+// RRHH usa este DTO para activar/desactivar la cuenta de un empleado
+// (PATCH /api/Usuarios/{id}/estado). Un usuario desactivado no puede
+// iniciar sesión ni cambiar su contraseña (ver AuthService).
+public class ActualizarEstadoUsuarioDto
+{
+    public bool Activar { get; set; }
+}
+
+// Subconjunto de datos que el propio empleado puede editar cuando RRHH le
+// habilita el permiso (PUT /api/Usuarios/mi-perfil). Deliberadamente NO
+// incluye cédula, correos, cargo, ciudad, rol ni beneficio de vacaciones:
+// esos campos siguen siendo exclusivos de RRHH vía el PUT /api/Usuarios/{id}.
+public class ActualizarPerfilPropioDto
+{
+    [Phone(ErrorMessage = "El celular personal no tiene un formato válido.")]
+    [StringLength(20, ErrorMessage = "El celular personal no puede superar los 20 caracteres.")]
+    public string? CelularPersonal { get; set; }
+
+    [Phone(ErrorMessage = "El celular empresarial no tiene un formato válido.")]
+    [StringLength(20, ErrorMessage = "El celular empresarial no puede superar los 20 caracteres.")]
+    public string? CelularEmpresa { get; set; }
+
+    [StringLength(150, ErrorMessage = "La dirección no puede superar los 150 caracteres.")]
+    public string? Direccion { get; set; }
+
+    [StringLength(500, ErrorMessage = "La URL de la imagen no puede superar los 500 caracteres.")]
+    public string? UrlImagenPerfil { get; set; }
+
+    // --- Subrecursos que también puede mantener el propio empleado ---
+    public List<FamiliarActualizarDto>? Familiares { get; set; }
+    public List<ContactoEmergenciaActualizarDto>? ContactosEmergencia { get; set; }
+
+    public List<long>? FamiliaresAEliminar { get; set; }
+    public List<long>? ContactosEmergenciaAEliminar { get; set; }
 }

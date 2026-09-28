@@ -4,6 +4,9 @@ using Intranet.Services;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
+
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +25,8 @@ builder.Services.AddScoped<IImagenService, ImagenService>();
 builder.Services.AddScoped<ICloudinaryUploadService, CloudinaryUploadService>();
 
 builder.Services.AddScoped<IVacacionService, VacacionService>();
+
+builder.Services.AddHostedService<CumpleanosBackgroundService>();
 
 builder.Services.AddCors(options =>
 {

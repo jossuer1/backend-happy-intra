@@ -53,6 +53,7 @@ public class PerfilDto
     public bool TieneVacaciones { get; set; }
     public int DiasVacacionesAsignados { get; set; }
     public bool Estado { get; set; }
+    public bool PuedeActualizarPerfil { get; set; }
 
     // --- AGREGAR ESTAS PROPIEDADES DE IDs ---
     public long? IdCargo { get; set; }
@@ -60,6 +61,8 @@ public class PerfilDto
     public long? IdGenero { get; set; }
     public long? IdEstadoCivil { get; set; }
     public long? IdEtnia { get; set; }
+    public long? IdTipoSangre { get; set; }
+    public long? IdJefeDirecto { get; set; }
 
     // Propiedades de texto (para lectura simple si se necesitan)
     public string? Rol { get; set; }
@@ -69,6 +72,8 @@ public class PerfilDto
     public string? Genero { get; set; }
     public string? EstadoCivil { get; set; }
     public string? Etnia { get; set; }
+    public string? TipoSangre { get; set; }
+    public string? JefeDirecto { get; set; }
 
     // Listas de subrecursos...
     public List<FamiliarDto> Familiares { get; set; } = new();

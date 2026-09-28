@@ -1,19 +1,41 @@
+using System.ComponentModel.DataAnnotations;
+using Intranet.Helpers;
+
 namespace Intranet.DTOs;
 
 // Registrar vacaciones tomadas (descuenta días según el rango de fechas, calendario completo)
 public class VacacionDescuentoCrearDto
 {
+    [Required(ErrorMessage = "El usuario es obligatorio.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe indicar un usuario válido.")]
     public long IdUsuario { get; set; }
+
+    [Required(ErrorMessage = "La fecha de inicio es obligatoria.")]
     public DateTime FechaInicio { get; set; }
+
+    [Required(ErrorMessage = "La fecha de fin es obligatoria.")]
     public DateTime FechaFin { get; set; }
+
+    [Required(ErrorMessage = "El motivo es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(200, MinimumLength = 3, ErrorMessage = "El motivo debe tener entre 3 y 200 caracteres.")]
     public string Motivo { get; set; } = null!;
 }
 
 // Corrección manual: devuelve días sin necesidad de un rango de fechas
 public class VacacionAjusteCrearDto
 {
+    [Required(ErrorMessage = "El usuario es obligatorio.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe indicar un usuario válido.")]
     public long IdUsuario { get; set; }
+
+    [Required(ErrorMessage = "Los días son obligatorios.")]
+    [Range(-365, 365, ErrorMessage = "Los días deben estar entre -365 y 365.")]
     public int Dias { get; set; }
+
+    [Required(ErrorMessage = "El motivo es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(200, MinimumLength = 3, ErrorMessage = "El motivo debe tener entre 3 y 200 caracteres.")]
     public string Motivo { get; set; } = null!;
 }
 
@@ -58,6 +80,8 @@ public class ResumenVacacionesDto
 public class ActualizarVacacionesUsuarioDto
 {
     public bool TieneVacaciones { get; set; }
+
+    [Range(0, 365, ErrorMessage = "Los días asignados deben estar entre 0 y 365.")]
     public int? DiasVacacionesAsignados { get; set; }
 }
 

@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
+using Intranet.Helpers;
 
 namespace Intranet.Services;
 
@@ -26,10 +27,15 @@ public class AuthService : IAuthService
 
     public async Task<ServiceResult<AuthResultDto>> LoginAsync(LoginDto dto)
     {
+        // El usuario puede identificarse con su cédula o con su correo empresarial;
+        // los correos se guardan en minúsculas, así que normalizamos antes de comparar.
+        var entrada = TextoHelper.SoloTrim(dto.Usuario)!;
+        var entradaComoCorreo = TextoHelper.AEmailNormalizado(entrada);
+
         var usuario = await _context.Usuarios
             .Include(u => u.Rol)
             .Include(u => u.Cargo)
-            .FirstOrDefaultAsync(u => u.Cedula == dto.Usuario || u.CorreoEmpresa == dto.Usuario);
+            .FirstOrDefaultAsync(u => u.Cedula == entrada || u.CorreoEmpresa == entradaComoCorreo);
 
         if (usuario == null || !usuario.Estado)
             return ServiceResult<AuthResultDto>.Fallo("Credenciales inválidas o usuario inactivo.");
@@ -68,6 +74,12 @@ public class AuthService : IAuthService
         if (usuario == null)
             return ServiceResult<string>.Fallo("Usuario no encontrado.");
 
+        // Este endpoint es anónimo (se usa antes de tener token, justo después del
+        // primer login), así que replicamos aquí la misma regla que en LoginAsync:
+        // un usuario desactivado no puede operar sobre su cuenta de ninguna forma.
+        if (!usuario.Estado)
+            return ServiceResult<string>.Fallo("Este usuario se encuentra inactivo.");
+
         if (!BCrypt.Net.BCrypt.Verify(dto.ContrasenaActual, usuario.ContrasenaHash))
             return ServiceResult<string>.Fallo("La contraseña actual es incorrecta.");
 
@@ -85,8 +97,10 @@ public class AuthService : IAuthService
         const string mensajeGenerico =
             "Si el correo está registrado, en unos minutos recibirás una contraseña temporal.";
 
+        var correo = TextoHelper.AEmailNormalizado(dto.Correo);
+
         var usuario = await _context.Usuarios
-            .FirstOrDefaultAsync(u => u.CorreoPersonal == dto.Correo && u.Estado);
+            .FirstOrDefaultAsync(u => u.CorreoPersonal == correo && u.Estado);
 
         // No revelamos si el correo existe o no: siempre devolvemos el mismo
         // mensaje genérico, para no dar pistas a quien intente enumerar cuentas.

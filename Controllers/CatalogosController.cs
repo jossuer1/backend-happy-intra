@@ -25,6 +25,20 @@ public class CatalogosController : ControllerBase
         _context = context;
     }
 
+    // --- OPCIONES FIJAS ---
+    // Listas que se validan en el backend sin tener tabla propia (ver Models/OpcionesFijas.cs).
+    // El frontend las usa para armar sus combos.
+    [AllowAnonymous]
+    [HttpGet("opciones-fijas")]
+    public IActionResult GetOpcionesFijas()
+        => Ok(new
+        {
+            tiposContrato = TiposContrato.Todos,
+            tiposContratoConFechaFin = TiposContrato.ConFechaFin,
+            jornadas = Jornadas.Todas,
+            parentescosFamiliar = Parentescos.Todos
+        });
+
     // --- ÁREAS ---
     [AllowAnonymous]
     [HttpGet("areas")]

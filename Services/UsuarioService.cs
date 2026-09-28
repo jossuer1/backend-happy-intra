@@ -69,6 +69,8 @@ public class UsuarioService : IUsuarioService
                 t.Institucion = TextoHelper.AMayusculasObligatorio(t.Institucion);
             }
 
+        dto.CargoIess = string.IsNullOrWhiteSpace(dto.CargoIess) ? null : TextoHelper.AMayusculas(dto.CargoIess);
+
         // 1. Validaciones de negocio
         if (await _context.Usuarios.AnyAsync(u => u.Cedula == dto.Cedula))
             return ServiceResult<UsuarioCreadoDto>.Fallo("La cédula/usuario ingresado ya se encuentra registrado.");
@@ -84,8 +86,29 @@ public class UsuarioService : IUsuarioService
             return ServiceResult<UsuarioCreadoDto>.Fallo("El tipo de sangre indicado no es válido.");
 
         if (dto.IdJefeDirecto.HasValue &&
-            !await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado))
-            return ServiceResult<UsuarioCreadoDto>.Fallo("El jefe directo indicado no existe o está inactivo.");
+            !await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado && u.EsJefe))
+            return ServiceResult<UsuarioCreadoDto>.Fallo("El jefe directo indicado no existe, está inactivo o no está habilitado como jefe.");
+
+        // Jornada, tipo de contrato y fecha de fin de contrato
+        var (jornada, errorJornada) = ResolverOpcion(dto.Jornada, Jornadas.Todas, "La jornada indicada no es válida");
+        if (errorJornada != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorJornada);
+
+        var (tipoContrato, errorTipo) = ResolverOpcion(dto.TipoContrato, TiposContrato.Todos, "El tipo de contrato indicado no es válido");
+        if (errorTipo != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorTipo);
+
+        var errorContrato = ValidarFechaFinContrato(tipoContrato, dto.FechaFinContrato, dto.FechaIngreso);
+        if (errorContrato != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorContrato);
+
+        // Familiares: parentesco dentro de la lista fija y reglas del cónyuge
+        var errorFamiliares = NormalizarYValidarFamiliares(dto.Familiares);
+        if (errorFamiliares != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorFamiliares);
+
+        if (dto.Familiares != null && dto.Familiares.Count(f => f.Parentesco == Parentescos.Conyuge) > 1)
+            return ServiceResult<UsuarioCreadoDto>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
 
         // 2. Generar y hashear contraseña temporal
         string claveTemporal = GenerarContrasenaAleatoria(10);
@@ -119,6 +142,14 @@ public class UsuarioService : IUsuarioService
             TieneVacaciones = dto.TieneVacaciones,
             DiasVacacionesAsignados = dto.TieneVacaciones ? (dto.DiasVacacionesAsignados ?? 15) : 0,
 
+            CargoIess = dto.CargoIess,
+            Jornada = jornada,
+            TipoContrato = tipoContrato,
+            FechaFinContrato = ComoUtc(dto.FechaFinContrato),
+            RecibeComisiones = dto.RecibeComisiones,
+            AcumulaDecimos = dto.AcumulaDecimos,
+            EsJefe = dto.EsJefe,
+
             Estado = true,
 
             Familiares = dto.Familiares?.Select(f => new Familiar
@@ -127,6 +158,7 @@ public class UsuarioService : IUsuarioService
                 Apellido = f.Apellido,
                 Parentesco = f.Parentesco,
                 FechaNacimiento = f.FechaNacimiento,
+                FechaUnion = ComoUtc(f.FechaUnion),
                 Estado = true
             }).ToList() ?? new List<Familiar>(),
 
@@ -269,6 +301,33 @@ public class UsuarioService : IUsuarioService
                 b.NumeroCuenta = TextoHelper.SoloTrim(b.NumeroCuenta)!;
             }
 
+        // --- Familiares: parentesco dentro de la lista fija y reglas del cónyuge ---
+        var errorFamiliares = NormalizarYValidarFamiliares(dto.Familiares);
+        if (errorFamiliares != null)
+            return ServiceResult<bool>.Fallo(errorFamiliares);
+
+        // --- Jornada, tipo de contrato y fecha de fin de contrato ---
+        // Se valida sobre lo que quedaría guardado: lo informado, o lo que ya tenía.
+        var (jornadaNueva, errorJornada) = ResolverOpcion(dto.Jornada, Jornadas.Todas, "La jornada indicada no es válida");
+        if (errorJornada != null)
+            return ServiceResult<bool>.Fallo(errorJornada);
+
+        var (tipoNuevo, errorTipo) = ResolverOpcion(dto.TipoContrato, TiposContrato.Todos, "El tipo de contrato indicado no es válido");
+        if (errorTipo != null)
+            return ServiceResult<bool>.Fallo(errorTipo);
+
+        var tipoFinal = tipoNuevo ?? usuario.TipoContrato;
+
+        // Si el tipo final no admite fecha de fin (p. ej. pasa de EMERGENTE a INDEFINIDO),
+        // la fecha guardada se descarta; si la admite, se conserva salvo que llegue una nueva.
+        DateTime? fechaFinFinal = dto.FechaFinContrato.HasValue
+            ? ComoUtc(dto.FechaFinContrato)
+            : (TiposContrato.RequiereFechaFin(tipoFinal) ? usuario.FechaFinContrato : null);
+
+        var errorContrato = ValidarFechaFinContrato(tipoFinal, fechaFinFinal, dto.FechaIngreso ?? usuario.FechaIngreso);
+        if (errorContrato != null)
+            return ServiceResult<bool>.Fallo(errorContrato);
+
         // --- Unicidad si cambian cédula o correos ---
         if (dto.Cedula != null && dto.Cedula != usuario.Cedula &&
             await _context.Usuarios.AnyAsync(u => u.Cedula == dto.Cedula && u.IdUsuario != id))
@@ -294,9 +353,16 @@ public class UsuarioService : IUsuarioService
             if (dto.IdJefeDirecto.Value == id)
                 return ServiceResult<bool>.Fallo("Un usuario no puede ser jefe directo de sí mismo.");
 
-            if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado))
-                return ServiceResult<bool>.Fallo("El jefe directo indicado no existe o está inactivo.");
+            if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado && u.EsJefe))
+                return ServiceResult<bool>.Fallo("El jefe directo indicado no existe, está inactivo o no está habilitado como jefe.");
         }
+
+        // No se puede quitar la marca de jefe a quien todavía tiene gente a su cargo:
+        // esas personas se quedarían con un jefe que ya no puede aprobar sus solicitudes.
+        if (dto.EsJefe == false && usuario.EsJefe &&
+            await _context.Usuarios.AnyAsync(u => u.IdJefeDirecto == id && u.Estado))
+            return ServiceResult<bool>.Fallo(
+                "No se puede quitar la marca de jefe: este usuario tiene empleados activos a su cargo. Reasigna primero a sus subordinados.");
 
         // --- Campos escalares (solo se tocan los que vienen informados) ---
         if (dto.Nombre != null) usuario.Nombre = dto.Nombre;
@@ -313,6 +379,16 @@ public class UsuarioService : IUsuarioService
         if (dto.IdTipoSangre.HasValue) usuario.IdTipoSangre = dto.IdTipoSangre.Value;
         if (dto.IdJefeDirecto.HasValue) usuario.IdJefeDirecto = dto.IdJefeDirecto.Value;
         if (dto.FechaIngreso.HasValue) usuario.FechaIngreso = dto.FechaIngreso.Value;
+
+        // --- Condición laboral ---
+        if (dto.CargoIess != null)
+            usuario.CargoIess = string.IsNullOrWhiteSpace(dto.CargoIess) ? null : TextoHelper.AMayusculas(dto.CargoIess);
+        if (jornadaNueva != null) usuario.Jornada = jornadaNueva;
+        usuario.TipoContrato = tipoFinal;
+        usuario.FechaFinContrato = fechaFinFinal;
+        if (dto.RecibeComisiones.HasValue) usuario.RecibeComisiones = dto.RecibeComisiones.Value;
+        if (dto.AcumulaDecimos.HasValue) usuario.AcumulaDecimos = dto.AcumulaDecimos.Value;
+        if (dto.EsJefe.HasValue) usuario.EsJefe = dto.EsJefe.Value;
         if (dto.CelularEmpresa != null) usuario.CelularEmpresa = dto.CelularEmpresa;
         if (dto.CelularPersonal != null) usuario.CelularPersonal = dto.CelularPersonal;
         if (dto.Direccion != null) usuario.Direccion = dto.Direccion;
@@ -356,6 +432,7 @@ public class UsuarioService : IUsuarioService
                     existente.Apellido = f.Apellido;
                     existente.Parentesco = f.Parentesco;
                     existente.FechaNacimiento = f.FechaNacimiento;
+                    existente.FechaUnion = ComoUtc(f.FechaUnion);
                 }
                 else
                 {
@@ -365,11 +442,16 @@ public class UsuarioService : IUsuarioService
                         Apellido = f.Apellido,
                         Parentesco = f.Parentesco,
                         FechaNacimiento = f.FechaNacimiento,
+                        FechaUnion = ComoUtc(f.FechaUnion),
                         Estado = true
                     });
                 }
             }
         }
+
+        // Un empleado solo puede tener un cónyuge (se revisa sobre el resultado final).
+        if (usuario.Familiares.Count(f => f.Estado && f.Parentesco == Parentescos.Conyuge) > 1)
+            return ServiceResult<bool>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
 
         // --- Contactos de emergencia ---
         if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
@@ -548,6 +630,10 @@ public class UsuarioService : IUsuarioService
             return ServiceResult<bool>.Fallo(
                 "No tienes habilitada la edición de tu perfil en este momento. Pídele a RRHH que la active.");
 
+        var errorFamiliares = NormalizarYValidarFamiliares(dto.Familiares);
+        if (errorFamiliares != null)
+            return ServiceResult<bool>.Fallo(errorFamiliares);
+
         // --- Normalización (mismas reglas que en el resto del sistema) ---
         dto.CelularEmpresa = TextoHelper.SoloTrim(dto.CelularEmpresa);
         dto.CelularPersonal = TextoHelper.SoloTrim(dto.CelularPersonal);
@@ -587,6 +673,7 @@ public class UsuarioService : IUsuarioService
                     existente.Apellido = f.Apellido;
                     existente.Parentesco = f.Parentesco;
                     existente.FechaNacimiento = f.FechaNacimiento;
+                    existente.FechaUnion = ComoUtc(f.FechaUnion);
                 }
                 else
                 {
@@ -596,11 +683,16 @@ public class UsuarioService : IUsuarioService
                         Apellido = f.Apellido,
                         Parentesco = f.Parentesco,
                         FechaNacimiento = f.FechaNacimiento,
+                        FechaUnion = ComoUtc(f.FechaUnion),
                         Estado = true
                     });
                 }
             }
         }
+
+        // Un empleado solo puede tener un cónyuge (se revisa sobre el resultado final).
+        if (usuario.Familiares.Count(f => f.Estado && f.Parentesco == Parentescos.Conyuge) > 1)
+            return ServiceResult<bool>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
 
         // --- Contactos de emergencia (mismo upsert por Id que usa RRHH) ---
         if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
@@ -656,6 +748,72 @@ public class UsuarioService : IUsuarioService
         await _context.SaveChangesAsync();
 
         return ServiceResult<bool>.Ok(true);
+    }
+
+    // Las fechas de estos campos son solo "día" y la columna es timestamptz: se marcan
+    // como UTC (igual que en VacacionService) para que Npgsql no rechace un Kind sin definir.
+    private static DateTime? ComoUtc(DateTime? fecha)
+        => fecha.HasValue ? DateTime.SpecifyKind(fecha.Value, DateTimeKind.Utc) : null;
+
+    // Resuelve un valor de lista fija: (null, null) si no se informó; (valor canónico, null)
+    // si es válido; (null, mensaje) si viene algo que no está en la lista.
+    private static (string? Valor, string? Error) ResolverOpcion(
+        string? entrada, IReadOnlyCollection<string> validas, string mensajeInvalido)
+    {
+        if (string.IsNullOrWhiteSpace(entrada))
+            return (null, null);
+
+        var canonico = OpcionesHelper.Normalizar(entrada, validas);
+        if (canonico == null)
+            return (null, $"{mensajeInvalido}. Valores permitidos: {string.Join(", ", validas)}.");
+
+        return (canonico, null);
+    }
+
+    // EMERGENTE y PRODUCTIVO exigen fecha de fin (posterior al ingreso); el resto de
+    // tipos (o sin tipo) no admiten fecha de fin. Devuelve un mensaje de error o null.
+    private static string? ValidarFechaFinContrato(string? tipoContrato, DateTime? fechaFin, DateTime? fechaIngreso)
+    {
+        if (TiposContrato.RequiereFechaFin(tipoContrato))
+        {
+            if (!fechaFin.HasValue)
+                return $"La fecha de fin de contrato es obligatoria para contratos {tipoContrato}.";
+
+            if (fechaIngreso.HasValue && fechaFin.Value.Date <= fechaIngreso.Value.Date)
+                return "La fecha de fin de contrato debe ser posterior a la fecha de ingreso.";
+
+            return null;
+        }
+
+        if (fechaFin.HasValue)
+            return $"La fecha de fin de contrato solo aplica a contratos {string.Join(" o ", TiposContrato.ConFechaFin)}.";
+
+        return null;
+    }
+
+    // Lleva el parentesco de cada familiar a su valor canónico (CONYUGE o HIJO) y aplica
+    // la regla de fechas: el cónyuge usa FechaUnion (su FechaNacimiento se descarta) y
+    // los hijos no pueden traer FechaUnion. Devuelve un mensaje de error o null.
+    private static string? NormalizarYValidarFamiliares(IEnumerable<IFamiliarEntrada>? familiares)
+    {
+        if (familiares == null)
+            return null;
+
+        foreach (var familiar in familiares)
+        {
+            var parentesco = OpcionesHelper.Normalizar(familiar.Parentesco, Parentescos.Todos);
+            if (parentesco == null)
+                return $"El parentesco del familiar es obligatorio y debe ser uno de: {string.Join(", ", Parentescos.Todos)}.";
+
+            familiar.Parentesco = parentesco;
+
+            if (parentesco == Parentescos.Conyuge)
+                familiar.FechaNacimiento = null;
+            else if (familiar.FechaUnion.HasValue)
+                return "La fecha de unión solo aplica al cónyuge.";
+        }
+
+        return null;
     }
 
     private static string GenerarContrasenaAleatoria(int longitud = 10)

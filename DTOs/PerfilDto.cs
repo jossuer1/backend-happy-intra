@@ -7,6 +7,7 @@ public class FamiliarDto
     public string? Apellido { get; set; }
     public string? Parentesco { get; set; }
     public DateTime? FechaNacimiento { get; set; }
+    public DateTime? FechaUnion { get; set; }
 }
 
 public class ContactoEmergenciaDto
@@ -54,6 +55,15 @@ public class PerfilDto
     public int DiasVacacionesAsignados { get; set; }
     public bool Estado { get; set; }
     public bool PuedeActualizarPerfil { get; set; }
+
+    // --- Condición laboral ---
+    public string? CargoIess { get; set; }
+    public string? Jornada { get; set; }
+    public string? TipoContrato { get; set; }
+    public DateTime? FechaFinContrato { get; set; }
+    public bool RecibeComisiones { get; set; }
+    public bool AcumulaDecimos { get; set; }
+    public bool EsJefe { get; set; }
 
     // --- AGREGAR ESTAS PROPIEDADES DE IDs ---
     public long? IdCargo { get; set; }

@@ -63,7 +63,8 @@ public class AuthService : IAuthService
             Apellido = usuario.Apellido,
             CorreoEmpresa = usuario.CorreoEmpresa,
             Rol = usuario.Rol?.Nombre,
-            Cargo = usuario.Cargo?.Nombre
+            Cargo = usuario.Cargo?.Nombre,
+            EsJefe = usuario.EsJefe
         });
     }
 

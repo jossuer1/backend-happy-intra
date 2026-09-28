@@ -11,4 +11,7 @@ public class AuthResultDto
     public string? CorreoEmpresa { get; set; }
     public string? Rol { get; set; }
     public string? Cargo { get; set; }
+
+    // Para que el frontend muestre (o no) la pantalla de aprobación de vacaciones del equipo.
+    public bool EsJefe { get; set; }
 }

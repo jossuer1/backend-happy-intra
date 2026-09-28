@@ -11,6 +11,10 @@ public class Familiar
     public string? Apellido { get; set; }
     public string? Parentesco { get; set; }
     public DateTime? FechaNacimiento { get; set; }
+
+    // Solo se usa cuando el parentesco es CONYUGE: desde cuándo son pareja.
+    // En ese caso se llena esta fecha y FechaNacimiento queda vacía.
+    public DateTime? FechaUnion { get; set; }
     public bool Estado { get; set; } = true;
 
     public virtual Usuario Usuario { get; set; } = null!;

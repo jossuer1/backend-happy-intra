@@ -269,11 +269,8 @@ public class VacacionService : IVacacionService
         if (dto.FechaInicio.Date < DateTime.UtcNow.Date)
             return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de inicio no puede ser una fecha pasada.");
 
-        var fechaInicioUtc = DateTime.SpecifyKind(dto.FechaInicio.Date, DateTimeKind.Utc);
-        var fechaFinUtc = DateTime.SpecifyKind(dto.FechaFin.Date, DateTimeKind.Utc);
-
         // Días calendario, inclusivo (mismo criterio que el descuento directo de RRHH)
-        int diasSolicitados = (fechaFinUtc - fechaInicioUtc).Days + 1;
+        int diasSolicitados = (dto.FechaFin.Date - dto.FechaInicio.Date).Days + 1;
 
         var saldoResult = await ObtenerSaldoAsync(idUsuario);
         if (!saldoResult.Exito)
@@ -288,8 +285,8 @@ public class VacacionService : IVacacionService
             s.IdUsuario == idUsuario &&
             s.Estado != EstadoSolicitudVacacion.RechazadaJefe &&
             s.Estado != EstadoSolicitudVacacion.RechazadaRrhh &&
-            s.FechaInicio.Date <= fechaFinUtc &&
-            s.FechaFin.Date >= fechaInicioUtc);
+            s.FechaInicio.Date <= dto.FechaFin.Date &&
+            s.FechaFin.Date >= dto.FechaInicio.Date);
 
         if (yaExisteEnRango)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
@@ -298,8 +295,8 @@ public class VacacionService : IVacacionService
         var solicitud = new SolicitudVacacion
         {
             IdUsuario = idUsuario,
-            FechaInicio = fechaInicioUtc,
-            FechaFin = fechaFinUtc,
+            FechaInicio = DateTime.SpecifyKind(dto.FechaInicio.Date, DateTimeKind.Utc),
+            FechaFin = DateTime.SpecifyKind(dto.FechaFin.Date, DateTimeKind.Utc),
             DiasSolicitados = diasSolicitados,
             Motivo = dto.Motivo,
             Estado = EstadoSolicitudVacacion.PendienteJefe,

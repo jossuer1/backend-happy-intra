@@ -11,7 +11,7 @@ namespace Intranet.DTOs;
 // La baja se maneja aparte, con las listas "...AEliminar" (por Id).
 // ---------------------------------------------------------------------
 
-public class FamiliarActualizarDto
+public class FamiliarActualizarDto : IFamiliarEntrada
 {
     public long? IdFamiliar { get; set; }
 
@@ -23,10 +23,15 @@ public class FamiliarActualizarDto
     [StringLength(50)]
     public string? Apellido { get; set; }
 
+    // Valores permitidos: CONYUGE o HIJO (ver Parentescos).
     [StringLength(30)]
     public string? Parentesco { get; set; }
 
+    // Para HIJO. Si el parentesco es CONYUGE se ignora (se usa FechaUnion).
     public DateTime? FechaNacimiento { get; set; }
+
+    // Solo para CONYUGE: desde cuándo son pareja.
+    public DateTime? FechaUnion { get; set; }
 }
 
 public class ContactoEmergenciaActualizarDto
@@ -137,6 +142,27 @@ public class ActualizarUsuarioDto
     public bool? TieneVacaciones { get; set; }
 
     public int? DiasVacacionesAsignados { get; set; }
+
+    // --- Condición laboral (solo se tocan los que vienen informados) ---
+    // CargoIess: enviar texto vacío para borrarlo.
+    [StringLength(100, ErrorMessage = "El cargo IESS no puede superar los 100 caracteres.")]
+    public string? CargoIess { get; set; }
+
+    [StringLength(30, ErrorMessage = "La jornada no puede superar los 30 caracteres.")]
+    public string? Jornada { get; set; }
+
+    [StringLength(30, ErrorMessage = "El tipo de contrato no puede superar los 30 caracteres.")]
+    public string? TipoContrato { get; set; }
+
+    // Obligatoria (y solo permitida) para contratos EMERGENTE o PRODUCTIVO. Si el
+    // contrato pasa a otro tipo, la fecha guardada se borra sola.
+    public DateTime? FechaFinContrato { get; set; }
+
+    public bool? RecibeComisiones { get; set; }
+    public bool? AcumulaDecimos { get; set; }
+
+    // Habilita (o no) a este usuario para ser jefe directo de otros.
+    public bool? EsJefe { get; set; }
 
     // --- Subrecursos: alta y edición (upsert por Id) ---
     public List<FamiliarActualizarDto>? Familiares { get; set; }

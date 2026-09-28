@@ -4,7 +4,7 @@ using Intranet.Helpers;
 namespace Intranet.DTOs;
 
 
-public class FamiliarCrearDto
+public class FamiliarCrearDto : IFamiliarEntrada
 {
     [Required(ErrorMessage = "El nombre del familiar es obligatorio.")]
     [NoSoloEspacios]
@@ -14,10 +14,15 @@ public class FamiliarCrearDto
     [StringLength(50, ErrorMessage = "El apellido no puede superar los 50 caracteres.")]
     public string? Apellido { get; set; }
 
+    // Valores permitidos: CONYUGE o HIJO (ver Parentescos).
     [StringLength(30, ErrorMessage = "El parentesco no puede superar los 30 caracteres.")]
     public string? Parentesco { get; set; }
 
+    // Para HIJO. Si el parentesco es CONYUGE se ignora (se usa FechaUnion).
     public DateTime? FechaNacimiento { get; set; }
+
+    // Solo para CONYUGE: desde cuándo son pareja.
+    public DateTime? FechaUnion { get; set; }
 }
 
 public class ContactoEmergenciaCrearDto
@@ -134,6 +139,27 @@ public class CrearUsuarioDto
 
     [Range(0, 365, ErrorMessage = "Los días de vacaciones asignados deben estar entre 0 y 365.")]
     public int? DiasVacacionesAsignados { get; set; }
+
+    // Condición laboral
+    [StringLength(100, ErrorMessage = "El cargo IESS no puede superar los 100 caracteres.")]
+    public string? CargoIess { get; set; }
+
+    // Ver Jornadas en Models/OpcionesFijas.cs
+    [StringLength(30, ErrorMessage = "La jornada no puede superar los 30 caracteres.")]
+    public string? Jornada { get; set; }
+
+    // Ver TiposContrato en Models/OpcionesFijas.cs
+    [StringLength(30, ErrorMessage = "El tipo de contrato no puede superar los 30 caracteres.")]
+    public string? TipoContrato { get; set; }
+
+    // Obligatoria (y solo permitida) para contratos EMERGENTE o PRODUCTIVO.
+    public DateTime? FechaFinContrato { get; set; }
+
+    public bool RecibeComisiones { get; set; }
+    public bool AcumulaDecimos { get; set; }
+
+    // Habilita a este usuario para ser elegido como jefe directo de otros.
+    public bool EsJefe { get; set; }
 
     // Listas anidadas
     public List<FamiliarCrearDto>? Familiares { get; set; }

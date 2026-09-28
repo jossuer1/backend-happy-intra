@@ -54,6 +54,26 @@ public class Usuario
     public bool TieneVacaciones { get; set; } = true;
     public int DiasVacacionesAsignados { get; set; } = 15;
 
+    // --- Condición laboral ---
+    // Cargo tal como consta en la afiliación del IESS (puede diferir del cargo en Happy Pay).
+    public string? CargoIess { get; set; }
+
+    // Valores permitidos en Models/OpcionesFijas.cs (Jornadas y TiposContrato).
+    public string? Jornada { get; set; }
+    public string? TipoContrato { get; set; }
+
+    // Solo aplica a los tipos de contrato que vencen (EMERGENTE / PRODUCTIVO).
+    public DateTime? FechaFinContrato { get; set; }
+
+    public bool RecibeComisiones { get; set; } = false;
+    public bool AcumulaDecimos { get; set; } = false;
+
+    // Habilita a este usuario para ser elegido como jefe directo de otros (y, por
+    // tanto, para aprobar solicitudes de vacaciones). Es una marca aparte del rol
+    // porque cada usuario tiene un solo rol y un colaborador de RRHH también puede
+    // ser jefe. Solo RRHH la modifica.
+    public bool EsJefe { get; set; } = false;
+
     public bool Estado { get; set; } = true;
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;

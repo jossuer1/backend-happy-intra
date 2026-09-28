@@ -65,7 +65,8 @@ public class UsuariosController : ControllerBase
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
                 u.Estado,
                 u.TieneVacaciones,
-                u.PuedeActualizarPerfil
+                u.PuedeActualizarPerfil,
+                u.EsJefe
             })
             .ToListAsync();
 
@@ -106,6 +107,15 @@ public class UsuariosController : ControllerBase
             Rol = u.Rol != null ? u.Rol.Nombre : null,
             PuedeActualizarPerfil = u.PuedeActualizarPerfil,
 
+            // --- Condición laboral ---
+            CargoIess = u.CargoIess,
+            Jornada = u.Jornada,
+            TipoContrato = u.TipoContrato,
+            FechaFinContrato = u.FechaFinContrato,
+            RecibeComisiones = u.RecibeComisiones,
+            AcumulaDecimos = u.AcumulaDecimos,
+            EsJefe = u.EsJefe,
+
             // --- ASIGNAR LOS IDs DE FORMA DIRECTA ---
             IdCargo = u.IdCargo,
             IdCiudad = u.IdCiudad,
@@ -130,7 +140,8 @@ public class UsuariosController : ControllerBase
                 Nombre = f.Nombre,
                 Apellido = f.Apellido,
                 Parentesco = f.Parentesco,
-                FechaNacimiento = f.FechaNacimiento
+                FechaNacimiento = f.FechaNacimiento,
+                FechaUnion = f.FechaUnion
             }).ToList(),
 
             ContactosEmergencia = u.ContactosEmergencia.Select(c => new ContactoEmergenciaDto

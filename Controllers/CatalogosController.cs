@@ -68,14 +68,17 @@ public class CatalogosController : ControllerBase
 
     [HttpPost("cargos")]
     [Authorize(Roles = "ADMIN")]
-    public async Task<IActionResult> CreateCargo([FromBody] CatalogoNombreDto dto)
+    public async Task<IActionResult> CreateCargo([FromBody] CargoCrearDto dto)
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (!await _context.Areas.AnyAsync(a => a.IdArea == dto.IdArea))
+            return BadRequest(new { mensaje = "El área seleccionada no existe." });
 
         if (await _context.Cargos.AnyAsync(c => c.Nombre == nombre))
             return BadRequest(new { mensaje = "Ya existe un cargo con ese nombre." });
 
-        var cargo = new Cargo { Nombre = nombre };
+        var cargo = new Cargo { Nombre = nombre, IdArea = dto.IdArea };
         _context.Cargos.Add(cargo);
         await _context.SaveChangesAsync();
         return Ok(cargo);

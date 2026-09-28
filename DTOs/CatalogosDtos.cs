@@ -12,6 +12,19 @@ public class CatalogoNombreDto
     public string Nombre { get; set; } = null!;
 }
 
+// --- CARGO: necesita el área a la que pertenece (Cargo.IdArea es obligatorio) ---
+public class CargoCrearDto
+{
+    [Required(ErrorMessage = "El nombre del cargo es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "El nombre debe tener entre 2 y 100 caracteres.")]
+    public string Nombre { get; set; } = null!;
+
+    [Required(ErrorMessage = "El área es obligatoria.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe seleccionar un área válida.")]
+    public long IdArea { get; set; }
+}
+
 // --- CIUDAD ---
 public class CiudadCrearDto
 {

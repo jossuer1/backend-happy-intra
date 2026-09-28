@@ -9,7 +9,7 @@ using QuestPDF.Infrastructure;
 QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.Services.AddHealthChecks();
 // Registrar servicios
 builder.Services.AddHttpClient<IEmailService, BrevoEmailService>();
 builder.Services.AddControllers();
@@ -75,6 +75,9 @@ builder.Services.AddAuthentication(options =>
     };
 });
 var app = builder.Build();
+
+
+app.MapHealthChecks("/health");
 
 // Configurar Pipeline HTTP
 if (app.Environment.IsDevelopment())

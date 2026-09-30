@@ -16,6 +16,27 @@ public class VacacionService : IVacacionService
         _context = context;
     }
 
+    // Npgsql (timestamptz) solo acepta DateTime con Kind=Utc.
+    // Como en vacaciones solo importa el DÍA, se normaliza a medianoche UTC.
+    private static DateTime AFechaUtc(DateTime fecha)
+        => DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+
+    // "Hoy" según la hora de Ecuador (UTC-5), para no adelantar el día por la noche.
+    private static DateTime ObtenerHoyEcuador()
+    {
+        TimeZoneInfo tz;
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("America/Guayaquil");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Windows sin soporte de IDs IANA
+            tz = TimeZoneInfo.FindSystemTimeZoneById("SA Pacific Standard Time");
+        }
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
+    }
+
     public async Task<ServiceResult<List<VacacionDto>>> ObtenerTodasLasVacacionesAsync()
     {
         var movimientos = await _context.Vacaciones
@@ -78,8 +99,11 @@ public class VacacionService : IVacacionService
         if (dto.FechaFin.Date < dto.FechaInicio.Date)
             return ServiceResult<VacacionDto>.Fallo("La fecha de fin no puede ser anterior a la fecha de inicio.");
 
+        var inicio = AFechaUtc(dto.FechaInicio);
+        var fin = AFechaUtc(dto.FechaFin);
+
         // Días calendario, inclusivo (ej. lunes a viernes de la misma semana = 5 días)
-        int diasSolicitados = (dto.FechaFin.Date - dto.FechaInicio.Date).Days + 1;
+        int diasSolicitados = (fin - inicio).Days + 1;
 
         var saldoResult = await ObtenerSaldoAsync(dto.IdUsuario);
         if (!saldoResult.Exito)
@@ -95,8 +119,8 @@ public class VacacionService : IVacacionService
             IdUsuario = dto.IdUsuario,
             IdRegistradoPor = idRegistradoPor,
             TipoMovimiento = "Descuento",
-            FechaInicio = DateTime.SpecifyKind(dto.FechaInicio, DateTimeKind.Utc),
-            FechaFin = DateTime.SpecifyKind(dto.FechaFin, DateTimeKind.Utc),
+            FechaInicio = inicio,
+            FechaFin = fin,
             DiasTomados = diasSolicitados,
             Observacion = dto.Motivo,
             Estado = true
@@ -266,11 +290,17 @@ public class VacacionService : IVacacionService
         if (dto.FechaFin.Date < dto.FechaInicio.Date)
             return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de fin no puede ser anterior a la fecha de inicio.");
 
-        if (dto.FechaInicio.Date < DateTime.UtcNow.Date)
+        // "Hoy" en Ecuador (UTC-5) para que después de las 19:00 no se adelante el día.
+        if (dto.FechaInicio.Date < ObtenerHoyEcuador())
             return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de inicio no puede ser una fecha pasada.");
 
+        // Fechas normalizadas a medianoche UTC (Kind=Utc): requisito de Npgsql para timestamptz.
+        // Se usan tanto en la consulta como al guardar.
+        var inicio = AFechaUtc(dto.FechaInicio);
+        var fin = AFechaUtc(dto.FechaFin);
+
         // Días calendario, inclusivo (mismo criterio que el descuento directo de RRHH)
-        int diasSolicitados = (dto.FechaFin.Date - dto.FechaInicio.Date).Days + 1;
+        int diasSolicitados = (fin - inicio).Days + 1;
 
         var saldoResult = await ObtenerSaldoAsync(idUsuario);
         if (!saldoResult.Exito)
@@ -281,12 +311,13 @@ public class VacacionService : IVacacionService
                 $"No tienes días suficientes. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {diasSolicitados}.");
 
         // Evita duplicar una solicitud sobre un rango que ya está en trámite o aprobado.
+        // Se comparan las columnas directamente (sin .Date) con parámetros UTC.
         bool yaExisteEnRango = await _context.SolicitudesVacaciones.AnyAsync(s =>
             s.IdUsuario == idUsuario &&
             s.Estado != EstadoSolicitudVacacion.RechazadaJefe &&
             s.Estado != EstadoSolicitudVacacion.RechazadaRrhh &&
-            s.FechaInicio.Date <= dto.FechaFin.Date &&
-            s.FechaFin.Date >= dto.FechaInicio.Date);
+            s.FechaInicio <= fin &&
+            s.FechaFin >= inicio);
 
         if (yaExisteEnRango)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
@@ -295,8 +326,8 @@ public class VacacionService : IVacacionService
         var solicitud = new SolicitudVacacion
         {
             IdUsuario = idUsuario,
-            FechaInicio = DateTime.SpecifyKind(dto.FechaInicio.Date, DateTimeKind.Utc),
-            FechaFin = DateTime.SpecifyKind(dto.FechaFin.Date, DateTimeKind.Utc),
+            FechaInicio = inicio,
+            FechaFin = fin,
             DiasSolicitados = diasSolicitados,
             Motivo = dto.Motivo,
             Estado = EstadoSolicitudVacacion.PendienteJefe,

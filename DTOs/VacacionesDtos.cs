@@ -49,6 +49,11 @@ public class VacacionDto
     public string? Observacion { get; set; }
     public DateTime FechaRegistro { get; set; }
     public string RegistradoPorNombre { get; set; } = null!;
+
+    // Solicitud aprobada que originó este movimiento (null si RRHH lo registró
+    // directo o si es un ajuste). Sirve para descargar la constancia en PDF
+    // desde el historial: GET /vacaciones/solicitudes/{IdSolicitud}/constancia
+    public long? IdSolicitud { get; set; }
 }
 
 public class SaldoVacacionesDto

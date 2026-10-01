@@ -179,7 +179,11 @@ public class VacacionService : IVacacionService
                 DiasTomados = v.DiasTomados,
                 Observacion = v.Observacion,
                 FechaRegistro = v.FechaRegistro,
-                RegistradoPorNombre = v.RegistradoPor.Nombre + " " + v.RegistradoPor.Apellido
+                RegistradoPorNombre = v.RegistradoPor.Nombre + " " + v.RegistradoPor.Apellido,
+                IdSolicitud = _context.SolicitudesVacaciones
+                    .Where(s => s.IdVacacionGenerada == v.IdVacacion)
+                    .Select(s => (long?)s.IdSolicitud)
+                    .FirstOrDefault()
             })
             .ToListAsync();
 

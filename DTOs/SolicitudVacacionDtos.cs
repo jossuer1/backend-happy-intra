@@ -20,7 +20,7 @@ public class SolicitudVacacionCrearDto
     public string Motivo { get; set; } = null!;
 }
 
-// Usado tanto por el jefe directo como por RRHH para aprobar o rechazar.
+// Lo usa el jefe directo para aprobar o rechazar.
 public class RespuestaSolicitudVacacionDto
 {
     [Required(ErrorMessage = "Debes indicar si apruebas o rechazas la solicitud.")]
@@ -46,10 +46,6 @@ public class SolicitudVacacionDto
     public string? JefeAprobadorNombre { get; set; }
     public DateTime? FechaRespuestaJefe { get; set; }
     public string? ObservacionJefe { get; set; }
-
-    public string? RrhhAprobadorNombre { get; set; }
-    public DateTime? FechaRespuestaRrhh { get; set; }
-    public string? ObservacionRrhh { get; set; }
 
     public DateTime FechaSolicitud { get; set; }
 }

@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<Vacacion> Vacaciones { get; set; }
     public DbSet<SolicitudVacacion> SolicitudesVacaciones { get; set; }
     public DbSet<Imagen> Imagen { get; set; }
+    public DbSet<PeriodoIess> PeriodosIess { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,9 +50,9 @@ public class AppDbContext : DbContext
         .HasForeignKey(u => u.IdJefeDirecto)
         .OnDelete(DeleteBehavior.Restrict);
 
-        // Solicitudes de vacaciones: tres relaciones distintas hacia Usuario
-        // (solicitante, jefe aprobador, RRHH aprobador). Todas Restrict para
-        // evitar ambigüedad de borrado en cascada entre ellas.
+        // Solicitudes de vacaciones: dos relaciones distintas hacia Usuario
+        // (solicitante y jefe aprobador). Ambas Restrict para evitar
+        // ambigüedad de borrado en cascada entre ellas.
         modelBuilder.Entity<SolicitudVacacion>()
         .HasOne(s => s.Usuario)
         .WithMany(u => u.SolicitudesVacaciones)
@@ -62,12 +63,6 @@ public class AppDbContext : DbContext
         .HasOne(s => s.JefeAprobador)
         .WithMany()
         .HasForeignKey(s => s.IdJefeAprobador)
-        .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<SolicitudVacacion>()
-        .HasOne(s => s.RrhhAprobador)
-        .WithMany()
-        .HasForeignKey(s => s.IdRrhhAprobador)
         .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<SolicitudVacacion>()

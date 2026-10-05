@@ -49,6 +49,9 @@ public class Usuario
 
     public string? UrlImagenPerfil { get; set; }
 
+    // Valores permitidos en Models/OpcionesFijas.cs (Nacionalidades). Por defecto ECUATORIANA.
+    public string Nacionalidad { get; set; } = Nacionalidades.Ecuatoriana;
+
     // --- Beneficio de Vacaciones ---
     // No todos los colaboradores tienen derecho a vacaciones (ej. pasantes, honorarios).
     public bool TieneVacaciones { get; set; } = true;
@@ -56,7 +59,11 @@ public class Usuario
 
     // --- Condición laboral ---
     // Cargo tal como consta en la afiliación del IESS (puede diferir del cargo en Happy Pay).
+    // Se conserva como "cargo IESS actual"; el historial completo vive en PeriodosIess.
     public string? CargoIess { get; set; }
+
+    // Código o descripción sectorial tal como consta en RRHH (ej. 1910000000012, BAJO FACTURA).
+    public string? Sectorial { get; set; }
 
     // Valores permitidos en Models/OpcionesFijas.cs (Jornadas y TiposContrato).
     public string? Jornada { get; set; }
@@ -112,6 +119,7 @@ public class Usuario
     public virtual ICollection<ContactoEmergencia> ContactosEmergencia { get; set; } = new List<ContactoEmergencia>();
     public virtual ICollection<DatoBancario> DatosBancarios { get; set; } = new List<DatoBancario>();
     public virtual ICollection<Titulo> Titulos { get; set; } = new List<Titulo>();
+    public virtual ICollection<PeriodoIess> PeriodosIess { get; set; } = new List<PeriodoIess>();
     public virtual ICollection<Vacacion> VacacionesRecibidas { get; set; } = new List<Vacacion>();
     public virtual ICollection<Vacacion> VacacionesRegistradas { get; set; } = new List<Vacacion>();
     public virtual ICollection<SolicitudVacacion> SolicitudesVacaciones { get; set; } = new List<SolicitudVacacion>();

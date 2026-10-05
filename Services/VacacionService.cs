@@ -10,10 +10,16 @@ namespace Intranet.Services;
 public class VacacionService : IVacacionService
 {
     private readonly AppDbContext _context;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _config;
+    private readonly ILogger<VacacionService> _logger;
 
-    public VacacionService(AppDbContext context)
+    public VacacionService(AppDbContext context, IEmailService emailService, IConfiguration config, ILogger<VacacionService> logger)
     {
         _context = context;
+        _emailService = emailService;
+        _config = config;
+        _logger = logger;
     }
 
     // Npgsql (timestamptz) solo acepta DateTime con Kind=Utc.
@@ -250,6 +256,13 @@ public class VacacionService : IVacacionService
             ? $"[Anulado por {anuladoPor?.Nombre} {anuladoPor?.Apellido} el {DateTime.UtcNow:dd/MM/yyyy}]"
             : $"{vacacion.Observacion} [Anulado por {anuladoPor?.Nombre} {anuladoPor?.Apellido} el {DateTime.UtcNow:dd/MM/yyyy}]";
 
+        // Si este descuento nació de una solicitud, esa solicitud queda ANULADA
+        // (así no se generan más documentos y el rango de fechas se libera).
+        var solicitudOrigen = await _context.SolicitudesVacaciones
+            .FirstOrDefaultAsync(x => x.IdVacacionGenerada == idVacacion);
+        if (solicitudOrigen != null && solicitudOrigen.Estado == EstadoSolicitudVacacion.Aprobada)
+            solicitudOrigen.Estado = EstadoSolicitudVacacion.Anulada;
+
         await _context.SaveChangesAsync();
 
         return ServiceResult<bool>.Ok(true);
@@ -319,7 +332,7 @@ public class VacacionService : IVacacionService
         bool yaExisteEnRango = await _context.SolicitudesVacaciones.AnyAsync(s =>
             s.IdUsuario == idUsuario &&
             s.Estado != EstadoSolicitudVacacion.RechazadaJefe &&
-            s.Estado != EstadoSolicitudVacacion.RechazadaRrhh &&
+            s.Estado != EstadoSolicitudVacacion.Anulada &&
             s.FechaInicio <= fin &&
             s.FechaFin >= inicio);
 
@@ -365,6 +378,12 @@ public class VacacionService : IVacacionService
         return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
     }
 
+    // El jefe directo es la única aprobación del flujo. Si aprueba:
+    //  1) se descuentan los días del saldo (movimiento "Descuento" en Vacaciones),
+    //  2) se generan los 3 documentos y se envían por correo al empleado,
+    //  3) se avisa a RRHH (sin adjuntos) para que tenga presente la entrega de los firmados.
+    // Si el correo falla, la aprobación NO se revierte: los documentos siguen
+    // disponibles para descargar desde la intranet.
     public async Task<ServiceResult<SolicitudVacacionDto>> ResponderComoJefeAsync(long idSolicitud, long idJefe, RespuestaSolicitudVacacionDto dto)
     {
         var solicitud = await _context.SolicitudesVacaciones.FindAsync(idSolicitud);
@@ -377,112 +396,203 @@ public class VacacionService : IVacacionService
         if (solicitud.Estado != EstadoSolicitudVacacion.PendienteJefe)
             return ServiceResult<SolicitudVacacionDto>.Fallo("Esta solicitud ya fue respondida y no puede modificarse.");
 
-        solicitud.Estado = dto.Aprobar ? EstadoSolicitudVacacion.PendienteRrhh : EstadoSolicitudVacacion.RechazadaJefe;
         solicitud.FechaRespuestaJefe = DateTime.UtcNow;
         solicitud.ObservacionJefe = dto.Observacion;
 
-        await _context.SaveChangesAsync();
+        if (!dto.Aprobar)
+        {
+            solicitud.Estado = EstadoSolicitudVacacion.RechazadaJefe;
+            await _context.SaveChangesAsync();
+            return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
+        }
 
-        return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
-    }
+        // Se vuelve a validar el saldo al momento de aprobar, por si hubo movimientos
+        // (ajustes, otras solicitudes) desde que se creó la solicitud.
+        var saldoResult = await ObtenerSaldoAsync(solicitud.IdUsuario);
+        if (!saldoResult.Exito)
+            return ServiceResult<SolicitudVacacionDto>.Fallo(saldoResult.Mensaje!);
 
-    public async Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerPendientesParaRrhhAsync()
-    {
-        var solicitudes = await ConsultaSolicitudesConIncludes()
-            .Where(s => s.Estado == EstadoSolicitudVacacion.PendienteRrhh)
-            .OrderBy(s => s.FechaSolicitud)
-            .ToListAsync();
-
-        return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
-    }
-
-    public async Task<ServiceResult<SolicitudVacacionDto>> ResponderComoRrhhAsync(long idSolicitud, long idRrhh, RespuestaSolicitudVacacionDto dto)
-    {
-        var solicitud = await _context.SolicitudesVacaciones.FindAsync(idSolicitud);
-        if (solicitud == null)
-            return ServiceResult<SolicitudVacacionDto>.Fallo("La solicitud no existe.");
-
-        if (solicitud.Estado != EstadoSolicitudVacacion.PendienteRrhh)
+        if (solicitud.DiasSolicitados > saldoResult.Data!.DiasDisponibles)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
-                "Esta solicitud no está pendiente de aprobación de RRHH (aún no la aprueba el jefe, o ya fue resuelta).");
+                $"El empleado ya no tiene saldo suficiente. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {solicitud.DiasSolicitados}.");
 
-        if (dto.Aprobar)
+        // Un solo SaveChanges: el descuento y la aprobación se guardan juntos o no se guarda nada.
+        solicitud.VacacionGenerada = new Vacacion
         {
-            // Se vuelve a validar el saldo al momento de la aprobación final, por si
-            // hubo movimientos (ajustes, otras solicitudes) desde que se creó la solicitud.
-            var saldoResult = await ObtenerSaldoAsync(solicitud.IdUsuario);
-            if (!saldoResult.Exito)
-                return ServiceResult<SolicitudVacacionDto>.Fallo(saldoResult.Mensaje!);
-
-            if (solicitud.DiasSolicitados > saldoResult.Data!.DiasDisponibles)
-                return ServiceResult<SolicitudVacacionDto>.Fallo(
-                    $"El empleado ya no tiene saldo suficiente. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {solicitud.DiasSolicitados}.");
-
-            var vacacion = new Vacacion
-            {
-                IdUsuario = solicitud.IdUsuario,
-                IdRegistradoPor = idRrhh,
-                TipoMovimiento = "Descuento",
-                FechaInicio = solicitud.FechaInicio,
-                FechaFin = solicitud.FechaFin,
-                DiasTomados = solicitud.DiasSolicitados,
-                Observacion = $"Solicitud de vacaciones aprobada. Motivo: {solicitud.Motivo}",
-                Estado = true
-            };
-            _context.Vacaciones.Add(vacacion);
-            await _context.SaveChangesAsync(); // para obtener el Id generado
-
-            solicitud.IdVacacionGenerada = vacacion.IdVacacion;
-            solicitud.Estado = EstadoSolicitudVacacion.Aprobada;
-        }
-        else
-        {
-            solicitud.Estado = EstadoSolicitudVacacion.RechazadaRrhh;
-        }
-
-        solicitud.IdRrhhAprobador = idRrhh;
-        solicitud.FechaRespuestaRrhh = DateTime.UtcNow;
-        solicitud.ObservacionRrhh = dto.Observacion;
+            IdUsuario = solicitud.IdUsuario,
+            IdRegistradoPor = idJefe,
+            TipoMovimiento = "Descuento",
+            FechaInicio = solicitud.FechaInicio,
+            FechaFin = solicitud.FechaFin,
+            DiasTomados = solicitud.DiasSolicitados,
+            Observacion = $"Solicitud de vacaciones aprobada por el jefe directo. Motivo: {solicitud.Motivo}",
+            Estado = true
+        };
+        solicitud.Estado = EstadoSolicitudVacacion.Aprobada;
 
         await _context.SaveChangesAsync();
+
+        await EnviarCorreosAprobacionAsync(solicitud.IdSolicitud);
 
         return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
     }
 
-    // Genera (sin guardar en ningún lado) la constancia en PDF de una solicitud
-    // ya aprobada. Se arma en memoria en cada llamada: nada se persiste ni en
-    // disco ni en base de datos, así que siempre refleja el estado más reciente.
-    public async Task<ServiceResult<byte[]>> GenerarConstanciaAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh)
+    // Arma los 3 PDFs de una solicitud aprobada. Se generan al vuelo en cada llamada;
+    // no se guardan en disco ni en base de datos.
+    // Pueden pedirlos el propio empleado, su jefe directo y RRHH.
+    public async Task<ServiceResult<List<DocumentoPdf>>> GenerarDocumentosAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh)
     {
-        var solicitud = await _context.SolicitudesVacaciones
-            .Include(s => s.Usuario)
-                .ThenInclude(u => u.Cargo)
-            .Include(s => s.JefeAprobador)
-            .Include(s => s.RrhhAprobador)
-            .FirstOrDefaultAsync(s => s.IdSolicitud == idSolicitud);
+        var solicitud = await ConsultaParaDocumentos().FirstOrDefaultAsync(s => s.IdSolicitud == idSolicitud);
 
         if (solicitud == null)
-            return ServiceResult<byte[]>.Fallo("La solicitud no existe.");
+            return ServiceResult<List<DocumentoPdf>>.Fallo("La solicitud no existe.");
 
-        if (!esRrhh && solicitud.IdUsuario != idUsuarioQueConsulta)
-            return ServiceResult<byte[]>.Fallo("No tienes permiso para ver esta solicitud.");
+        if (!esRrhh && solicitud.IdUsuario != idUsuarioQueConsulta && solicitud.IdJefeAprobador != idUsuarioQueConsulta)
+            return ServiceResult<List<DocumentoPdf>>.Fallo("No tienes permiso para ver esta solicitud.");
+
+        if (solicitud.Estado == EstadoSolicitudVacacion.Anulada)
+            return ServiceResult<List<DocumentoPdf>>.Fallo("Estas vacaciones fueron anuladas; ya no se pueden generar los documentos.");
 
         if (solicitud.Estado != EstadoSolicitudVacacion.Aprobada)
-            return ServiceResult<byte[]>.Fallo(
-                "Solo se puede generar la constancia de una solicitud ya aprobada por completo (jefe y RRHH).");
+            return ServiceResult<List<DocumentoPdf>>.Fallo("Los documentos solo se generan cuando el jefe directo ya aprobó la solicitud.");
 
-        // Informativo: el saldo actual del usuario para mostrarlo en el documento.
-        var saldoResult = await ObtenerSaldoAsync(solicitud.IdUsuario);
+        var datos = await ConstruirDatosDocumentosAsync(solicitud);
+        return ServiceResult<List<DocumentoPdf>>.Ok(GenerarPdfs(datos));
+    }
 
-        var pdf = ConstanciaVacacionesPdf.Generar(solicitud, saldoResult.Exito ? saldoResult.Data : null);
-        return ServiceResult<byte[]>.Ok(pdf);
+    private static List<DocumentoPdf> GenerarPdfs(DatosDocumentoVacaciones datos) => new()
+    {
+        new("1-solicitud-de-vacaciones.pdf", SolicitudVacacionesPdf.Generar(datos)),
+        new("2-acta-de-vacaciones.pdf", ActaVacacionesPdf.Generar(datos)),
+        new("3-declaracion-goce-y-pago-de-vacaciones.pdf", DeclaratoriaVacacionesPdf.Generar(datos))
+    };
+
+    private IQueryable<SolicitudVacacion> ConsultaParaDocumentos()
+        => _context.SolicitudesVacaciones
+            .Include(s => s.Usuario).ThenInclude(u => u.Cargo).ThenInclude(c => c!.Area)
+            .Include(s => s.Usuario).ThenInclude(u => u.Ciudad)
+            .Include(s => s.Usuario).ThenInclude(u => u.Genero)
+            .Include(s => s.JefeAprobador)
+            .Include(s => s.VacacionGenerada);
+
+    // Calcula todos los datos de los documentos. El saldo se toma "tal como quedó al
+    // aprobar esta solicitud" (movimientos hasta el descuento de esta solicitud), para
+    // que si el documento se vuelve a descargar después no cambien los días pendientes.
+    private async Task<DatosDocumentoVacaciones> ConstruirDatosDocumentosAsync(SolicitudVacacion s)
+    {
+        var u = s.Usuario;
+        long idDescuento = s.IdVacacionGenerada ?? long.MaxValue;
+
+        var movimientos = await _context.Vacaciones
+            .Where(v => v.IdUsuario == s.IdUsuario && v.Estado && v.IdVacacion <= idDescuento)
+            .ToListAsync();
+
+        int descontados = movimientos.Where(v => v.TipoMovimiento == "Descuento").Sum(v => v.DiasTomados);
+        int ajustados = movimientos.Where(v => v.TipoMovimiento == "Ajuste").Sum(v => v.DiasTomados);
+
+        int pendientes = u.DiasVacacionesAsignados - descontados + ajustados;
+        int disponiblesAntes = pendientes + s.DiasSolicitados;
+        int consumidosAntes = descontados - ajustados - s.DiasSolicitados;
+
+        var generoNombre = u.Genero?.Nombre ?? "";
+        bool esMujer = generoNombre.StartsWith("F", StringComparison.OrdinalIgnoreCase)
+                    || generoNombre.Contains("mujer", StringComparison.OrdinalIgnoreCase);
+
+        var fechaEmision = CalculosVacaciones.AHoraEcuador(s.FechaRespuestaJefe ?? DateTime.UtcNow).Date;
+
+        return new DatosDocumentoVacaciones
+        {
+            RazonSocial = _config["Empresa:RazonSocial"] ?? "HAPPYPAY S.A.",
+            RepresentanteLegal = _config["Empresa:RepresentanteLegal"] ?? "EDWIN FABIAN VASQUEZ PIEDRA",
+
+            NombreCompleto = $"{u.Nombre} {u.Apellido}",
+            Cedula = u.Cedula,
+            Area = u.Cargo?.Area?.Nombre ?? "",
+            Cargo = u.Cargo?.Nombre ?? "",
+            FechaIngreso = u.FechaIngreso,
+            EsMujer = esMujer,
+            Nacionalidad = u.Nacionalidad,
+
+            NombreJefe = s.JefeAprobador != null ? $"{s.JefeAprobador.Nombre} {s.JefeAprobador.Apellido}" : "",
+
+            // La ciudad es la del empleado; si no la tiene cargada se usa la ciudad por defecto.
+            Ciudad = u.Ciudad?.Nombre ?? _config["Empresa:CiudadPorDefecto"] ?? "Quito",
+            FechaEmision = fechaEmision,
+
+            PeriodoLaboral = CalculosVacaciones.PeriodoLaboral(u.FechaIngreso, consumidosAntes),
+            FechaInicio = s.FechaInicio,
+            FechaFin = s.FechaFin,
+            FechaReingreso = CalculosVacaciones.FechaReingreso(s.FechaFin),
+
+            DiasGozados = s.DiasSolicitados,
+            DiasDisponiblesAntes = disponiblesAntes,
+            DiasPendientes = pendientes,
+
+            Observacion = s.Motivo,
+
+            // El pago de las vacaciones va en el rol del mes en que EMPIEZAN.
+            MesRol = CalculosVacaciones.NombreMes(s.FechaInicio.Month),
+            AnioRol = s.FechaInicio.Year
+        };
+    }
+
+    // Correo al empleado (con los 3 PDFs adjuntos) y aviso a RRHH (sin adjuntos).
+    // Todo va dentro de try/catch: un fallo de correo nunca debe deshacer la aprobación.
+    private async Task EnviarCorreosAprobacionAsync(long idSolicitud)
+    {
+        try
+        {
+            var solicitud = await ConsultaParaDocumentos().FirstAsync(s => s.IdSolicitud == idSolicitud);
+            var datos = await ConstruirDatosDocumentosAsync(solicitud);
+            var adjuntos = GenerarPdfs(datos).Select(d => new EmailAdjunto(d.NombreArchivo, d.Contenido)).ToList();
+
+            var inicio = CalculosVacaciones.FechaLarga(datos.FechaInicio);
+            var fin = CalculosVacaciones.FechaLarga(datos.FechaFin);
+            var reingreso = CalculosVacaciones.FechaLarga(datos.FechaReingreso);
+
+            var correoEmpleado = string.IsNullOrWhiteSpace(solicitud.Usuario.CorreoEmpresa)
+                ? solicitud.Usuario.CorreoPersonal
+                : solicitud.Usuario.CorreoEmpresa;
+
+            var okEmpleado = await _emailService.SendEmailAsync(
+                correoEmpleado,
+                datos.NombreCompleto,
+                "Tus vacaciones fueron aprobadas",
+                PlantillasCorreo.VacacionesAprobadasEmpleado(
+                    solicitud.Usuario.Nombre, inicio, fin, reingreso, datos.DiasGozados, datos.DiasPendientes),
+                adjuntos);
+
+            if (!okEmpleado)
+                _logger.LogWarning("No se pudo enviar el correo de vacaciones aprobadas al empleado (solicitud {Id}).", idSolicitud);
+
+            var personalRrhh = await _context.Usuarios
+                .Where(x => x.Estado && x.Rol != null && x.Rol.Nombre == "RRHH")
+                .ToListAsync();
+
+            foreach (var rrhh in personalRrhh)
+            {
+                var correoRrhh = string.IsNullOrWhiteSpace(rrhh.CorreoEmpresa) ? rrhh.CorreoPersonal : rrhh.CorreoEmpresa;
+                var ok = await _emailService.SendEmailAsync(
+                    correoRrhh,
+                    $"{rrhh.Nombre} {rrhh.Apellido}",
+                    $"Vacaciones aprobadas: {datos.NombreCompleto}",
+                    PlantillasCorreo.VacacionesAprobadasRrhh(
+                        rrhh.Nombre, datos.NombreCompleto, inicio, fin, reingreso, datos.DiasGozados));
+
+                if (!ok)
+                    _logger.LogWarning("No se pudo enviar el aviso de vacaciones a RRHH ({Correo}, solicitud {Id}).", correoRrhh, idSolicitud);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al enviar los correos de vacaciones aprobadas (solicitud {Id}).", idSolicitud);
+        }
     }
 
     private IQueryable<SolicitudVacacion> ConsultaSolicitudesConIncludes()
         => _context.SolicitudesVacaciones
             .Include(s => s.Usuario)
-            .Include(s => s.JefeAprobador)
-            .Include(s => s.RrhhAprobador);
+            .Include(s => s.JefeAprobador);
 
     private async Task<SolicitudVacacionDto> MapearSolicitudDtoAsync(long idSolicitud)
     {
@@ -503,9 +613,6 @@ public class VacacionService : IVacacionService
         JefeAprobadorNombre = s.JefeAprobador != null ? $"{s.JefeAprobador.Nombre} {s.JefeAprobador.Apellido}" : null,
         FechaRespuestaJefe = s.FechaRespuestaJefe,
         ObservacionJefe = s.ObservacionJefe,
-        RrhhAprobadorNombre = s.RrhhAprobador != null ? $"{s.RrhhAprobador.Nombre} {s.RrhhAprobador.Apellido}" : null,
-        FechaRespuestaRrhh = s.FechaRespuestaRrhh,
-        ObservacionRrhh = s.ObservacionRrhh,
         FechaSolicitud = s.FechaSolicitud
     };
 }

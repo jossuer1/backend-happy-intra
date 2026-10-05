@@ -566,6 +566,9 @@ namespace Intranet.Migrations
                     b.Property<string>("Apellido")
                         .HasColumnType("text");
 
+                    b.Property<string>("Cedula")
+                        .HasColumnType("text");
+
                     b.Property<bool>("Estado")
                         .HasColumnType("boolean");
 
@@ -649,6 +652,33 @@ namespace Intranet.Migrations
                     b.HasKey("IdImagen");
 
                     b.ToTable("Imagen");
+                });
+
+            modelBuilder.Entity("Intranet.Models.PeriodoIess", b =>
+                {
+                    b.Property<long>("IdPeriodoIess")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdPeriodoIess"));
+
+                    b.Property<string>("CargoIess")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaIngreso")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FechaSalida")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("IdUsuario")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("IdPeriodoIess");
+
+                    b.HasIndex("IdUsuario");
+
+                    b.ToTable("PeriodosIess");
                 });
 
             modelBuilder.Entity("Intranet.Models.Provincia", b =>
@@ -942,16 +972,10 @@ namespace Intranet.Migrations
                     b.Property<DateTime?>("FechaRespuestaJefe")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("FechaRespuestaRrhh")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<DateTime>("FechaSolicitud")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("IdJefeAprobador")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("IdRrhhAprobador")
                         .HasColumnType("bigint");
 
                     b.Property<long>("IdUsuario")
@@ -967,14 +991,9 @@ namespace Intranet.Migrations
                     b.Property<string>("ObservacionJefe")
                         .HasColumnType("text");
 
-                    b.Property<string>("ObservacionRrhh")
-                        .HasColumnType("text");
-
                     b.HasKey("IdSolicitud");
 
                     b.HasIndex("IdJefeAprobador");
-
-                    b.HasIndex("IdRrhhAprobador");
 
                     b.HasIndex("IdUsuario");
 
@@ -1184,6 +1203,10 @@ namespace Intranet.Migrations
                     b.Property<string>("Jornada")
                         .HasColumnType("text");
 
+                    b.Property<string>("Nacionalidad")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1193,6 +1216,9 @@ namespace Intranet.Migrations
 
                     b.Property<bool>("RecibeComisiones")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Sectorial")
+                        .HasColumnType("text");
 
                     b.Property<bool>("TieneVacaciones")
                         .HasColumnType("boolean");
@@ -1336,6 +1362,17 @@ namespace Intranet.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("Intranet.Models.PeriodoIess", b =>
+                {
+                    b.HasOne("Intranet.Models.Usuario", "Usuario")
+                        .WithMany("PeriodosIess")
+                        .HasForeignKey("IdUsuario")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("Intranet.Models.Provincia", b =>
                 {
                     b.HasOne("Intranet.Models.Region", "Region")
@@ -1354,11 +1391,6 @@ namespace Intranet.Migrations
                         .HasForeignKey("IdJefeAprobador")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("Intranet.Models.Usuario", "RrhhAprobador")
-                        .WithMany()
-                        .HasForeignKey("IdRrhhAprobador")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Intranet.Models.Usuario", "Usuario")
                         .WithMany("SolicitudesVacaciones")
                         .HasForeignKey("IdUsuario")
@@ -1371,8 +1403,6 @@ namespace Intranet.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("JefeAprobador");
-
-                    b.Navigation("RrhhAprobador");
 
                     b.Navigation("Usuario");
 
@@ -1523,6 +1553,8 @@ namespace Intranet.Migrations
                     b.Navigation("DatosBancarios");
 
                     b.Navigation("Familiares");
+
+                    b.Navigation("PeriodosIess");
 
                     b.Navigation("SolicitudesVacaciones");
 

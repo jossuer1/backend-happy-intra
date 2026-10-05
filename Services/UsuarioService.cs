@@ -43,6 +43,7 @@ public class UsuarioService : IUsuarioService
                 f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
                 f.Apellido = TextoHelper.AMayusculas(f.Apellido);
                 f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+                f.Cedula = NormalizarCedulaOpcional(f.Cedula);
             }
 
         if (dto.ContactosEmergencia != null)
@@ -70,6 +71,11 @@ public class UsuarioService : IUsuarioService
             }
 
         dto.CargoIess = string.IsNullOrWhiteSpace(dto.CargoIess) ? null : TextoHelper.AMayusculas(dto.CargoIess);
+        dto.Sectorial = string.IsNullOrWhiteSpace(dto.Sectorial) ? null : TextoHelper.AMayusculas(dto.Sectorial);
+
+        if (dto.PeriodosIess != null)
+            foreach (var per in dto.PeriodosIess)
+                per.CargoIess = string.IsNullOrWhiteSpace(per.CargoIess) ? null : TextoHelper.AMayusculas(per.CargoIess);
 
         // 1. Validaciones de negocio
         if (await _context.Usuarios.AnyAsync(u => u.Cedula == dto.Cedula))
@@ -102,6 +108,14 @@ public class UsuarioService : IUsuarioService
         if (errorContrato != null)
             return ServiceResult<UsuarioCreadoDto>.Fallo(errorContrato);
 
+        var (nacionalidad, errorNacionalidad) = ResolverOpcion(dto.Nacionalidad, Nacionalidades.Todas, "La nacionalidad indicada no es válida");
+        if (errorNacionalidad != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorNacionalidad);
+
+        var errorPeriodos = ValidarPeriodosIess(dto.PeriodosIess?.Select(per => (per.FechaIngreso!.Value, per.FechaSalida)));
+        if (errorPeriodos != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorPeriodos);
+
         // Familiares: parentesco dentro de la lista fija y reglas del cónyuge
         var errorFamiliares = NormalizarYValidarFamiliares(dto.Familiares);
         if (errorFamiliares != null)
@@ -109,6 +123,10 @@ public class UsuarioService : IUsuarioService
 
         if (dto.Familiares != null && dto.Familiares.Count(f => f.Parentesco == Parentescos.Conyuge) > 1)
             return ServiceResult<UsuarioCreadoDto>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
+
+        var errorCedulasFam = ValidarCedulasFamiliares(dto.Familiares?.Select(f => f.Cedula) ?? Enumerable.Empty<string?>(), dto.Cedula);
+        if (errorCedulasFam != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorCedulasFam);
 
         // 2. Generar y hashear contraseña temporal
         string claveTemporal = GenerarContrasenaAleatoria(10);
@@ -143,6 +161,8 @@ public class UsuarioService : IUsuarioService
             DiasVacacionesAsignados = dto.TieneVacaciones ? (dto.DiasVacacionesAsignados ?? 15) : 0,
 
             CargoIess = dto.CargoIess,
+            Sectorial = dto.Sectorial,
+            Nacionalidad = nacionalidad ?? Nacionalidades.Ecuatoriana,
             Jornada = jornada,
             TipoContrato = tipoContrato,
             FechaFinContrato = ComoUtc(dto.FechaFinContrato),
@@ -157,6 +177,7 @@ public class UsuarioService : IUsuarioService
                 Nombre = f.Nombre,
                 Apellido = f.Apellido,
                 Parentesco = f.Parentesco,
+                Cedula = f.Cedula,
                 FechaNacimiento = f.FechaNacimiento,
                 FechaUnion = ComoUtc(f.FechaUnion),
                 Estado = true
@@ -183,7 +204,14 @@ public class UsuarioService : IUsuarioService
             {
                 NombreTitulo = t.NombreTitulo,
                 Institucion = t.Institucion
-            }).ToList() ?? new List<Titulo>()
+            }).ToList() ?? new List<Titulo>(),
+
+            PeriodosIess = dto.PeriodosIess?.Select(per => new PeriodoIess
+            {
+                FechaIngreso = ComoUtc(per.FechaIngreso)!.Value,
+                FechaSalida = ComoUtc(per.FechaSalida),
+                CargoIess = per.CargoIess
+            }).ToList() ?? new List<PeriodoIess>()
         };
 
         // 4. Guardar
@@ -253,6 +281,7 @@ public class UsuarioService : IUsuarioService
             .Include(u => u.ContactosEmergencia)
             .Include(u => u.Titulos)
             .Include(u => u.DatosBancarios)
+            .Include(u => u.PeriodosIess)
             .AsSplitQuery()
             .FirstOrDefaultAsync(u => u.IdUsuario == id);
 
@@ -275,6 +304,7 @@ public class UsuarioService : IUsuarioService
                 f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
                 f.Apellido = TextoHelper.AMayusculas(f.Apellido);
                 f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+                f.Cedula = NormalizarCedulaOpcional(f.Cedula);
             }
 
         if (dto.ContactosEmergencia != null)
@@ -315,6 +345,10 @@ public class UsuarioService : IUsuarioService
         var (tipoNuevo, errorTipo) = ResolverOpcion(dto.TipoContrato, TiposContrato.Todos, "El tipo de contrato indicado no es válido");
         if (errorTipo != null)
             return ServiceResult<bool>.Fallo(errorTipo);
+
+        var (nacionalidadNueva, errorNacionalidad) = ResolverOpcion(dto.Nacionalidad, Nacionalidades.Todas, "La nacionalidad indicada no es válida");
+        if (errorNacionalidad != null)
+            return ServiceResult<bool>.Fallo(errorNacionalidad);
 
         var tipoFinal = tipoNuevo ?? usuario.TipoContrato;
 
@@ -383,6 +417,9 @@ public class UsuarioService : IUsuarioService
         // --- Condición laboral ---
         if (dto.CargoIess != null)
             usuario.CargoIess = string.IsNullOrWhiteSpace(dto.CargoIess) ? null : TextoHelper.AMayusculas(dto.CargoIess);
+        if (dto.Sectorial != null)
+            usuario.Sectorial = string.IsNullOrWhiteSpace(dto.Sectorial) ? null : TextoHelper.AMayusculas(dto.Sectorial);
+        if (nacionalidadNueva != null) usuario.Nacionalidad = nacionalidadNueva;
         if (jornadaNueva != null) usuario.Jornada = jornadaNueva;
         usuario.TipoContrato = tipoFinal;
         usuario.FechaFinContrato = fechaFinFinal;
@@ -431,6 +468,7 @@ public class UsuarioService : IUsuarioService
                     existente.Nombre = f.Nombre;
                     existente.Apellido = f.Apellido;
                     existente.Parentesco = f.Parentesco;
+                    existente.Cedula = f.Cedula;
                     existente.FechaNacimiento = f.FechaNacimiento;
                     existente.FechaUnion = ComoUtc(f.FechaUnion);
                 }
@@ -441,6 +479,7 @@ public class UsuarioService : IUsuarioService
                         Nombre = f.Nombre,
                         Apellido = f.Apellido,
                         Parentesco = f.Parentesco,
+                        Cedula = f.Cedula,
                         FechaNacimiento = f.FechaNacimiento,
                         FechaUnion = ComoUtc(f.FechaUnion),
                         Estado = true
@@ -452,6 +491,11 @@ public class UsuarioService : IUsuarioService
         // Un empleado solo puede tener un cónyuge (se revisa sobre el resultado final).
         if (usuario.Familiares.Count(f => f.Estado && f.Parentesco == Parentescos.Conyuge) > 1)
             return ServiceResult<bool>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
+
+        var errorCedulasFamiliares = ValidarCedulasFamiliares(
+            usuario.Familiares.Where(f => f.Estado).Select(f => f.Cedula), usuario.Cedula);
+        if (errorCedulasFamiliares != null)
+            return ServiceResult<bool>.Fallo(errorCedulasFamiliares);
 
         // --- Contactos de emergencia ---
         if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
@@ -571,6 +615,50 @@ public class UsuarioService : IUsuarioService
             }
         }
 
+        // --- Períodos IESS (entradas y salidas) ---
+        if (dto.PeriodosIessAEliminar is { Count: > 0 })
+        {
+            var aEliminar = usuario.PeriodosIess.Where(x => dto.PeriodosIessAEliminar.Contains(x.IdPeriodoIess)).ToList();
+            foreach (var per in aEliminar)
+            {
+                usuario.PeriodosIess.Remove(per);
+                _context.Remove(per);
+            }
+        }
+
+        if (dto.PeriodosIess is { Count: > 0 })
+        {
+            foreach (var per in dto.PeriodosIess)
+            {
+                var cargoPeriodo = string.IsNullOrWhiteSpace(per.CargoIess) ? null : TextoHelper.AMayusculas(per.CargoIess);
+
+                if (per.IdPeriodoIess is long idP && idP > 0)
+                {
+                    var existente = usuario.PeriodosIess.FirstOrDefault(x => x.IdPeriodoIess == idP);
+                    if (existente == null)
+                        return ServiceResult<bool>.Fallo($"El período IESS con id {idP} no pertenece a este usuario.");
+
+                    existente.FechaIngreso = ComoUtc(per.FechaIngreso)!.Value;
+                    existente.FechaSalida = ComoUtc(per.FechaSalida);
+                    existente.CargoIess = cargoPeriodo;
+                }
+                else
+                {
+                    usuario.PeriodosIess.Add(new PeriodoIess
+                    {
+                        FechaIngreso = ComoUtc(per.FechaIngreso)!.Value,
+                        FechaSalida = ComoUtc(per.FechaSalida),
+                        CargoIess = cargoPeriodo
+                    });
+                }
+            }
+        }
+
+        // Se valida sobre el resultado final: sin traslapes y con un solo período abierto (el último).
+        var errorPeriodos = ValidarPeriodosIess(usuario.PeriodosIess.Select(x => (x.FechaIngreso, x.FechaSalida)));
+        if (errorPeriodos != null)
+            return ServiceResult<bool>.Fallo(errorPeriodos);
+
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -662,6 +750,7 @@ public class UsuarioService : IUsuarioService
                 f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
                 f.Apellido = TextoHelper.AMayusculas(f.Apellido);
                 f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
+                f.Cedula = NormalizarCedulaOpcional(f.Cedula);
 
                 if (f.IdFamiliar is long idF && idF > 0)
                 {
@@ -672,6 +761,7 @@ public class UsuarioService : IUsuarioService
                     existente.Nombre = f.Nombre;
                     existente.Apellido = f.Apellido;
                     existente.Parentesco = f.Parentesco;
+                    existente.Cedula = f.Cedula;
                     existente.FechaNacimiento = f.FechaNacimiento;
                     existente.FechaUnion = ComoUtc(f.FechaUnion);
                 }
@@ -682,6 +772,7 @@ public class UsuarioService : IUsuarioService
                         Nombre = f.Nombre,
                         Apellido = f.Apellido,
                         Parentesco = f.Parentesco,
+                        Cedula = f.Cedula,
                         FechaNacimiento = f.FechaNacimiento,
                         FechaUnion = ComoUtc(f.FechaUnion),
                         Estado = true
@@ -693,6 +784,11 @@ public class UsuarioService : IUsuarioService
         // Un empleado solo puede tener un cónyuge (se revisa sobre el resultado final).
         if (usuario.Familiares.Count(f => f.Estado && f.Parentesco == Parentescos.Conyuge) > 1)
             return ServiceResult<bool>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
+
+        var errorCedulasFamiliares = ValidarCedulasFamiliares(
+            usuario.Familiares.Where(f => f.Estado).Select(f => f.Cedula), usuario.Cedula);
+        if (errorCedulasFamiliares != null)
+            return ServiceResult<bool>.Fallo(errorCedulasFamiliares);
 
         // --- Contactos de emergencia (mismo upsert por Id que usa RRHH) ---
         if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
@@ -811,6 +907,61 @@ public class UsuarioService : IUsuarioService
                 familiar.FechaNacimiento = null;
             else if (familiar.FechaUnion.HasValue)
                 return "La fecha de unión solo aplica al cónyuge.";
+        }
+
+        return null;
+    }
+
+    // Cédula opcional de un familiar: se recorta y, si queda vacía, se guarda como null.
+    private static string? NormalizarCedulaOpcional(string? cedula)
+    {
+        var limpia = TextoHelper.SoloTrim(cedula);
+        return string.IsNullOrEmpty(limpia) ? null : limpia;
+    }
+
+    // Las cédulas informadas de los familiares no pueden repetirse entre sí ni coincidir
+    // con la del propio empleado. Devuelve un mensaje de error o null.
+    private static string? ValidarCedulasFamiliares(IEnumerable<string?> cedulas, string? cedulaEmpleado)
+    {
+        var informadas = cedulas
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!.Trim())
+            .ToList();
+
+        if (informadas.Count != informadas.Distinct().Count())
+            return "Hay familiares registrados con la misma cédula.";
+
+        if (!string.IsNullOrWhiteSpace(cedulaEmpleado) && informadas.Contains(cedulaEmpleado.Trim()))
+            return "La cédula de un familiar no puede ser la misma que la del empleado.";
+
+        return null;
+    }
+
+    // Reglas de los períodos IESS de un colaborador (se evalúan ordenados por ingreso):
+    // la salida no puede ser anterior al ingreso, un período no puede empezar antes de que
+    // termine el anterior, y solo el último puede quedar abierto (sin fecha de salida).
+    private static string? ValidarPeriodosIess(IEnumerable<(DateTime Ingreso, DateTime? Salida)>? periodos)
+    {
+        if (periodos == null)
+            return null;
+
+        var lista = periodos.OrderBy(x => x.Ingreso).ToList();
+
+        for (int i = 0; i < lista.Count; i++)
+        {
+            var (ingreso, salida) = lista[i];
+
+            if (salida.HasValue && salida.Value.Date < ingreso.Date)
+                return $"En el período IESS que inicia el {ingreso:dd/MM/yyyy}, la fecha de salida no puede ser anterior a la de ingreso.";
+
+            if (i < lista.Count - 1)
+            {
+                if (!salida.HasValue)
+                    return "Solo el último período IESS puede quedar sin fecha de salida.";
+
+                if (salida.Value.Date >= lista[i + 1].Ingreso.Date)
+                    return $"Los períodos IESS no pueden traslaparse: el que inicia el {ingreso:dd/MM/yyyy} debe terminar antes del siguiente ingreso.";
+            }
         }
 
         return null;

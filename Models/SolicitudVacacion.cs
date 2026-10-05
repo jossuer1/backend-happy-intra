@@ -3,17 +3,18 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Intranet.Models;
 
-// Estados posibles del flujo de aprobación de una solicitud de vacaciones.
-// El flujo siempre es: el empleado solicita -> su jefe directo responde ->
-// si el jefe aprueba, pasa a RRHH -> RRHH da la aprobación final (y ahí
-// recién se descuentan los días del saldo, vía un registro en Vacaciones).
+// Estados del flujo de una solicitud de vacaciones.
+// El flujo es: el empleado solicita -> su jefe directo responde. Si el jefe
+// aprueba, ahí mismo se descuentan los días del saldo (registro en Vacaciones),
+// se generan los 3 documentos y se avisa por correo al empleado y a RRHH.
+// RRHH NO aprueba nada: solo recibe después los documentos firmados.
 public static class EstadoSolicitudVacacion
 {
     public const string PendienteJefe = "PENDIENTE_JEFE";
-    public const string PendienteRrhh = "PENDIENTE_RRHH";
     public const string Aprobada = "APROBADA";
     public const string RechazadaJefe = "RECHAZADA_JEFE";
-    public const string RechazadaRrhh = "RECHAZADA_RRHH";
+    // La solicitud estaba aprobada pero RRHH anuló el descuento (vacaciones canceladas).
+    public const string Anulada = "ANULADA";
 }
 
 public class SolicitudVacacion
@@ -34,7 +35,7 @@ public class SolicitudVacacion
 
     public string Estado { get; set; } = EstadoSolicitudVacacion.PendienteJefe;
 
-    // --- Respuesta del jefe directo (primer nivel de aprobación) ---
+    // --- Respuesta del jefe directo (única aprobación del flujo) ---
     public long? IdJefeAprobador { get; set; }
 
     [ForeignKey(nameof(IdJefeAprobador))]
@@ -43,17 +44,8 @@ public class SolicitudVacacion
     public DateTime? FechaRespuestaJefe { get; set; }
     public string? ObservacionJefe { get; set; }
 
-    // --- Respuesta de RRHH (segundo y último nivel de aprobación) ---
-    public long? IdRrhhAprobador { get; set; }
-
-    [ForeignKey(nameof(IdRrhhAprobador))]
-    public virtual Usuario? RrhhAprobador { get; set; }
-
-    public DateTime? FechaRespuestaRrhh { get; set; }
-    public string? ObservacionRrhh { get; set; }
-
-    // Una vez que RRHH aprueba, se genera automáticamente el movimiento de
-    // descuento en Vacaciones; queda enlazado aquí para trazabilidad.
+    // Cuando el jefe aprueba se genera el movimiento de descuento en Vacaciones;
+    // queda enlazado aquí para trazabilidad.
     public long? IdVacacionGenerada { get; set; }
 
     [ForeignKey(nameof(IdVacacionGenerada))]

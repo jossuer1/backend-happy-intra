@@ -5,6 +5,7 @@ namespace Intranet.DTOs;
 public interface IFamiliarEntrada
 {
     string? Parentesco { get; set; }
+    string? Cedula { get; set; }
     DateTime? FechaNacimiento { get; set; }
     DateTime? FechaUnion { get; set; }
 }

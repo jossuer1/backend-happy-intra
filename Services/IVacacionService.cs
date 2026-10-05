@@ -23,16 +23,11 @@ public interface IVacacionService
     // El jefe ve las solicitudes de sus subordinados que esperan su respuesta.
     Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerPendientesParaJefeAsync(long idJefe);
 
-    // El jefe aprueba (pasa a RRHH) o rechaza (termina el flujo) la solicitud.
+    // El jefe aprueba o rechaza. Al aprobar: se descuentan los días, se generan los 3
+    // documentos y se envían por correo al empleado (y se avisa a RRHH).
     Task<ServiceResult<SolicitudVacacionDto>> ResponderComoJefeAsync(long idSolicitud, long idJefe, RespuestaSolicitudVacacionDto dto);
 
-    // RRHH ve las solicitudes que el jefe ya aprobó y esperan el visto bueno final.
-    Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerPendientesParaRrhhAsync();
-
-    // RRHH da la aprobación final (genera el descuento real de días) o rechaza.
-    Task<ServiceResult<SolicitudVacacionDto>> ResponderComoRrhhAsync(long idSolicitud, long idRrhh, RespuestaSolicitudVacacionDto dto);
-
-    // Genera (sin guardar en ningún lado) la constancia en PDF de una solicitud
-    // ya aprobada. El propio empleado puede generar la suya; RRHH, la de cualquiera.
-    Task<ServiceResult<byte[]>> GenerarConstanciaAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh);
+    // Genera (sin guardar en ningún lado) los 3 PDFs de una solicitud aprobada:
+    // solicitud, acta y declaración de goce y pago.
+    Task<ServiceResult<List<Documentos.DocumentoPdf>>> GenerarDocumentosAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh);
 }

@@ -36,3 +36,35 @@ public static class Parentescos
 
     public static readonly string[] Todos = { Conyuge, Hijo };
 }
+
+
+// Nacionalidades permitidas del colaborador (Latinoamérica). Se guardan en femenino
+// ("ECUATORIANA") y el acta de vacaciones las adapta al género con Gentilicio().
+// Para sumar una nacionalidad nueva basta con agregarla a la lista (en femenino).
+public static class Nacionalidades
+{
+    public const string Ecuatoriana = "ECUATORIANA";
+
+    // Ecuatoriana va primero (es el valor por defecto); el resto, en orden alfabético.
+    public static readonly string[] Todas =
+    {
+        Ecuatoriana,
+        "ARGENTINA", "BOLIVIANA", "BRASILEÑA", "CHILENA", "COLOMBIANA",
+        "COSTARRICENSE", "CUBANA", "DOMINICANA", "GUATEMALTECA", "HAITIANA",
+        "HONDUREÑA", "MEXICANA", "NICARAGÜENSE", "PANAMEÑA", "PARAGUAYA",
+        "PERUANA", "PUERTORRIQUEÑA", "SALVADOREÑA", "URUGUAYA", "VENEZOLANA"
+    };
+
+    // Femenino -> gentilicio según el género: "CHILENA" -> "chileno" (hombre) / "chilena" (mujer).
+    // Los que terminan en -E (COSTARRICENSE, NICARAGÜENSE) son invariables y se devuelven tal cual.
+    public static string Gentilicio(string? nacionalidad, bool esMujer)
+    {
+        var valor = string.IsNullOrWhiteSpace(nacionalidad) ? Ecuatoriana : nacionalidad.Trim();
+        valor = valor.ToLowerInvariant();
+
+        if (!esMujer && valor.EndsWith('a'))
+            valor = valor[..^1] + "o";
+
+        return valor;
+    }
+}

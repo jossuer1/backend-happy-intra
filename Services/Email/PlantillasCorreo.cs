@@ -189,4 +189,85 @@ public static class PlantillasCorreo
         </body>
         </html>";
   }
+
+  // Marco común (mismo estilo que los demás correos) para los avisos de vacaciones.
+  private static string MarcoVacaciones(string titulo, string cuerpoHtml)
+  {
+    return $"""
+        <!DOCTYPE html>
+        <html>
+        <body style="margin:0; padding:0; background-color:#f8fafc; font-family:Segoe UI, Arial, sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8fafc; padding:32px 0;">
+            <tr>
+              <td align="center">
+                <table width="520" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+                  <tr>
+                    <td style="background-color:#1e5a63; padding:28px 24px; text-align:center;">
+                      <h1 style="margin:0; color:#ffffff; font-size:22px;">{titulo}</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:28px 24px; font-size:15px; color:#475569; line-height:1.6;">
+                      {cuerpoHtml}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:20px 24px; background-color:#f8fafc; border-top:1px solid #e2e8f0; text-align:center;">
+                      <p style="margin:0; font-size:12px; color:#94a3b8;">Happy Pay · Este correo fue generado automáticamente</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+        """;
+  }
+
+  // Para el empleado: aprobación del jefe + qué hacer con los 3 documentos adjuntos.
+  public static string VacacionesAprobadasEmpleado(string nombre, string fechaInicio, string fechaFin,
+      string fechaReingreso, int dias, int diasPendientes)
+  {
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{nombre}</strong>,</p>
+      <p style="margin:0 0 16px;">Tu jefe directo aprobó tus vacaciones:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f7f8; border:1px solid #d0e3e5; border-radius:8px; margin-bottom:16px;">
+        <tr><td style="padding:16px; color:#1e5a63;">
+          <strong>Desde:</strong> {fechaInicio}<br/>
+          <strong>Hasta:</strong> {fechaFin}<br/>
+          <strong>Regresas a laborar:</strong> {fechaReingreso}<br/>
+          <strong>Días:</strong> {dias} &nbsp;·&nbsp; <strong>Días pendientes:</strong> {diasPendientes}
+        </td></tr>
+      </table>
+      <p style="margin:0 0 8px;"><strong>Qué debes hacer ahora:</strong></p>
+      <ol style="margin:0 0 16px; padding-left:20px;">
+        <li>Imprime los 3 documentos adjuntos (también puedes descargarlos desde la intranet): solicitud, acta y declaración.</li>
+        <li>Fírmalos y haz que tu jefe inmediato también los firme.</li>
+        <li><strong>Entrégalos a Talento Humano</strong> (en físico o escaneados por correo).</li>
+      </ol>
+      <p style="margin:0;">Los días ya fueron descontados de tu saldo.</p>
+      """;
+    return MarcoVacaciones("Tus vacaciones fueron aprobadas ✅", cuerpo);
+  }
+
+  // Para RRHH: solo un aviso, sin adjuntos.
+  public static string VacacionesAprobadasRrhh(string nombreRrhh, string empleado, string fechaInicio,
+      string fechaFin, string fechaReingreso, int dias)
+  {
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{nombreRrhh}</strong>,</p>
+      <p style="margin:0 0 16px;">El jefe directo aprobó las vacaciones de <strong>{empleado}</strong>:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f7f8; border:1px solid #d0e3e5; border-radius:8px; margin-bottom:16px;">
+        <tr><td style="padding:16px; color:#1e5a63;">
+          <strong>Desde:</strong> {fechaInicio}<br/>
+          <strong>Hasta:</strong> {fechaFin}<br/>
+          <strong>Regresa a laborar:</strong> {fechaReingreso}<br/>
+          <strong>Días:</strong> {dias}
+        </td></tr>
+      </table>
+      <p style="margin:0;">Los días ya se descontaron del saldo. Ten presente que el colaborador debe hacerte llegar los documentos firmados.</p>
+      """;
+    return MarcoVacaciones($"Vacaciones aprobadas: {empleado}", cuerpo);
+  }
 }

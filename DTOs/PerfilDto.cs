@@ -6,6 +6,7 @@ public class FamiliarDto
     public string Nombre { get; set; } = null!;
     public string? Apellido { get; set; }
     public string? Parentesco { get; set; }
+    public string? Cedula { get; set; }
     public DateTime? FechaNacimiento { get; set; }
     public DateTime? FechaUnion { get; set; }
 }
@@ -37,6 +38,17 @@ public class TituloDto
     public DateTime? FechaObtencion { get; set; }
 }
 
+public class PeriodoIessDto
+{
+    public long IdPeriodoIess { get; set; }
+    public DateTime FechaIngreso { get; set; }
+    public DateTime? FechaSalida { get; set; }
+    public string? CargoIess { get; set; }
+
+    // true mientras el período siga vigente (sin fecha de salida).
+    public bool Vigente => FechaSalida == null;
+}
+
 public class PerfilDto
 {
     public long IdUsuario { get; set; }
@@ -58,6 +70,8 @@ public class PerfilDto
 
     // --- Condición laboral ---
     public string? CargoIess { get; set; }
+    public string? Sectorial { get; set; }
+    public string? Nacionalidad { get; set; }
     public string? Jornada { get; set; }
     public string? TipoContrato { get; set; }
     public DateTime? FechaFinContrato { get; set; }
@@ -68,6 +82,8 @@ public class PerfilDto
     // --- AGREGAR ESTAS PROPIEDADES DE IDs ---
     public long? IdCargo { get; set; }
     public long? IdCiudad { get; set; }
+    public long? IdProvincia { get; set; }
+    public long? IdRegion { get; set; }
     public long? IdGenero { get; set; }
     public long? IdEstadoCivil { get; set; }
     public long? IdEtnia { get; set; }
@@ -79,6 +95,8 @@ public class PerfilDto
     public string? Cargo { get; set; }
     public string? Departamento { get; set; }
     public string? Ciudad { get; set; }
+    public string? Provincia { get; set; }
+    public string? Region { get; set; }
     public string? Genero { get; set; }
     public string? EstadoCivil { get; set; }
     public string? Etnia { get; set; }
@@ -90,4 +108,5 @@ public class PerfilDto
     public List<ContactoEmergenciaDto> ContactosEmergencia { get; set; } = new();
     public List<DatoBancarioDto> DatosBancarios { get; set; } = new();
     public List<TituloDto> Titulos { get; set; } = new();
+    public List<PeriodoIessDto> PeriodosIess { get; set; } = new();
 }

@@ -27,6 +27,10 @@ public class FamiliarActualizarDto : IFamiliarEntrada
     [StringLength(30)]
     public string? Parentesco { get; set; }
 
+    // Cédula del familiar (10 dígitos). Opcional.
+    [RegularExpression(@"^\d{10}$", ErrorMessage = "La cédula del familiar debe contener únicamente 10 dígitos numéricos.")]
+    public string? Cedula { get; set; }
+
     // Para HIJO. Si el parentesco es CONYUGE se ignora (se usa FechaUnion).
     public DateTime? FechaNacimiento { get; set; }
 
@@ -88,6 +92,20 @@ public class DatoBancarioActualizarDto
     [RegularExpression(@"^[0-9]+$", ErrorMessage = "El número de cuenta solo puede contener dígitos.")]
     [StringLength(30, MinimumLength = 3)]
     public string NumeroCuenta { get; set; } = null!;
+}
+
+public class PeriodoIessActualizarDto
+{
+    public long? IdPeriodoIess { get; set; }
+
+    [Required(ErrorMessage = "La fecha de ingreso al IESS es obligatoria.")]
+    public DateTime? FechaIngreso { get; set; }
+
+    // Null si el período sigue vigente. Solo un período puede quedar abierto.
+    public DateTime? FechaSalida { get; set; }
+
+    [StringLength(100, ErrorMessage = "El cargo IESS no puede superar los 100 caracteres.")]
+    public string? CargoIess { get; set; }
 }
 
 public class ActualizarUsuarioDto
@@ -158,6 +176,14 @@ public class ActualizarUsuarioDto
     // contrato pasa a otro tipo, la fecha guardada se borra sola.
     public DateTime? FechaFinContrato { get; set; }
 
+    // Sectorial: enviar texto vacío para borrarlo.
+    [StringLength(60, ErrorMessage = "El sectorial no puede superar los 60 caracteres.")]
+    public string? Sectorial { get; set; }
+
+    // Ver Nacionalidades en Models/OpcionesFijas.cs.
+    [StringLength(30, ErrorMessage = "La nacionalidad no puede superar los 30 caracteres.")]
+    public string? Nacionalidad { get; set; }
+
     public bool? RecibeComisiones { get; set; }
     public bool? AcumulaDecimos { get; set; }
 
@@ -169,12 +195,14 @@ public class ActualizarUsuarioDto
     public List<ContactoEmergenciaActualizarDto>? ContactosEmergencia { get; set; }
     public List<TituloActualizarDto>? Titulos { get; set; }
     public List<DatoBancarioActualizarDto>? DatosBancarios { get; set; }
+    public List<PeriodoIessActualizarDto>? PeriodosIess { get; set; }
 
     // --- Subrecursos: baja (por Id) ---
     public List<long>? FamiliaresAEliminar { get; set; }
     public List<long>? ContactosEmergenciaAEliminar { get; set; }
     public List<long>? TitulosAEliminar { get; set; }
     public List<long>? DatosBancariosAEliminar { get; set; }
+    public List<long>? PeriodosIessAEliminar { get; set; }
 }
 
 // RRHH usa este DTO para habilitar/deshabilitar la ventana de autoedición

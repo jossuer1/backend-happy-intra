@@ -36,7 +36,8 @@ public class CatalogosController : ControllerBase
             tiposContrato = TiposContrato.Todos,
             tiposContratoConFechaFin = TiposContrato.ConFechaFin,
             jornadas = Jornadas.Todas,
-            parentescosFamiliar = Parentescos.Todos
+            parentescosFamiliar = Parentescos.Todos,
+            nacionalidades = Nacionalidades.Todas
         });
 
     // --- ÁREAS ---
@@ -454,7 +455,8 @@ public class CatalogosController : ControllerBase
                 tiposContrato = TiposContrato.Todos,
                 tiposContratoConFechaFin = TiposContrato.ConFechaFin,
                 jornadas = Jornadas.Todas,
-                parentescosFamiliar = Parentescos.Todos
+                parentescosFamiliar = Parentescos.Todos,
+                nacionalidades = Nacionalidades.Todas
             }
         });
     }

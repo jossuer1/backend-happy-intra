@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -123,8 +124,9 @@ public class VacacionesController : ControllerBase
     }
 
     // ============================================================
-    // Solicitudes de vacaciones: el empleado solicita, primero responde
-    // su jefe directo y, si aprueba, RRHH da el visto bueno final.
+    // Solicitudes de vacaciones: el empleado solicita y su jefe directo aprueba o
+    // rechaza. Si aprueba, se descuentan los días, se generan los 3 documentos y se
+    // notifica por correo al empleado y a RRHH (RRHH no aprueba: solo recibe los firmados).
     // ============================================================
 
     // 8. El empleado logueado crea una solicitud de vacaciones.
@@ -161,7 +163,7 @@ public class VacacionesController : ControllerBase
     }
 
     // 11. El jefe directo aprueba o rechaza la solicitud de un subordinado.
-    // Si aprueba, la solicitud pasa a RRHH; si rechaza, el flujo termina ahí.
+    // Si aprueba: descuento de días + documentos + correos. Si rechaza, el flujo termina ahí.
     [HttpPatch("solicitudes/{id}/jefe")]
     public async Task<IActionResult> ResponderComoJefe(long id, [FromBody] RespuestaSolicitudVacacionDto dto)
     {
@@ -174,46 +176,48 @@ public class VacacionesController : ControllerBase
         return Ok(resultado.Data);
     }
 
-    // 12. Exclusivo RRHH: solicitudes que el jefe ya aprobó y esperan el visto
-    // bueno final antes de descontar los días del saldo del empleado.
-    [HttpGet("solicitudes/pendientes-rrhh")]
-    [Authorize(Roles = "RRHH")]
-    public async Task<IActionResult> ObtenerPendientesParaRrhh()
-    {
-        var resultado = await _vacacionService.ObtenerPendientesParaRrhhAsync();
-        return Ok(resultado.Data);
-    }
-
-    // 13. Exclusivo RRHH: aprobación final. Si aprueba, se genera automáticamente
-    // el movimiento de descuento y se debitan los días del saldo del empleado.
-    [HttpPatch("solicitudes/{id}/rrhh")]
-    [Authorize(Roles = "RRHH")]
-    public async Task<IActionResult> ResponderComoRrhh(long id, [FromBody] RespuestaSolicitudVacacionDto dto)
-    {
-        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var resultado = await _vacacionService.ResponderComoRrhhAsync(id, currentUserId, dto);
-
-        if (!resultado.Exito)
-            return BadRequest(new { mensaje = resultado.Mensaje });
-
-        return Ok(resultado.Data);
-    }
-
-    // 14. Genera (al vuelo, sin guardarla en ningún lado) la constancia en PDF
-    // de una solicitud ya aprobada. El propio empleado puede descargar la suya;
-    // RRHH puede descargar la de cualquiera. Cada llamada reconstruye el PDF
-    // desde cero con los datos más recientes.
-    [HttpGet("solicitudes/{id}/constancia")]
-    public async Task<IActionResult> GenerarConstancia(long id)
+    // 12. Descarga los 3 documentos (solicitud, acta y declaración) de una solicitud
+    // ya aprobada, en un ZIP. Se generan al vuelo; no se guardan en ningún lado.
+    // Los puede descargar el empleado, su jefe directo y RRHH.
+    [HttpGet("solicitudes/{id}/documentos")]
+    public async Task<IActionResult> DescargarDocumentos(long id)
     {
         var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var esRrhh = User.IsInRole("RRHH");
 
-        var resultado = await _vacacionService.GenerarConstanciaAsync(id, currentUserId, esRrhh);
-
+        var resultado = await _vacacionService.GenerarDocumentosAsync(id, currentUserId, esRrhh);
         if (!resultado.Exito)
             return BadRequest(new { mensaje = resultado.Mensaje });
 
-        return File(resultado.Data!, "application/pdf", $"constancia-vacaciones-{id}.pdf");
+        using var memoria = new MemoryStream();
+        using (var zip = new ZipArchive(memoria, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var doc in resultado.Data!)
+            {
+                var entrada = zip.CreateEntry(doc.NombreArchivo, CompressionLevel.Fastest);
+                using var salida = entrada.Open();
+                await salida.WriteAsync(doc.Contenido);
+            }
+        }
+
+        return File(memoria.ToArray(), "application/zip", $"documentos-vacaciones-{id}.zip");
+    }
+
+    // 13. Descarga uno solo de los documentos: 1 = solicitud, 2 = acta, 3 = declaración.
+    [HttpGet("solicitudes/{id}/documentos/{numero}")]
+    public async Task<IActionResult> DescargarDocumento(long id, int numero)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var esRrhh = User.IsInRole("RRHH");
+
+        var resultado = await _vacacionService.GenerarDocumentosAsync(id, currentUserId, esRrhh);
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        if (numero < 1 || numero > resultado.Data!.Count)
+            return BadRequest(new { mensaje = "El número de documento debe ser 1 (solicitud), 2 (acta) o 3 (declaración)." });
+
+        var documento = resultado.Data[numero - 1];
+        return File(documento.Contenido, "application/pdf", documento.NombreArchivo);
     }
 }

@@ -10,6 +10,9 @@ public class Familiar
     public string Nombre { get; set; } = null!;
     public string? Apellido { get; set; }
     public string? Parentesco { get; set; }
+
+    // Cédula del cónyuge o del hijo (10 dígitos). Opcional: un hijo recién nacido puede no tenerla aún.
+    public string? Cedula { get; set; }
     public DateTime? FechaNacimiento { get; set; }
 
     // Solo se usa cuando el parentesco es CONYUGE: desde cuándo son pareja.

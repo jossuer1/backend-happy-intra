@@ -18,6 +18,10 @@ public class FamiliarCrearDto : IFamiliarEntrada
     [StringLength(30, ErrorMessage = "El parentesco no puede superar los 30 caracteres.")]
     public string? Parentesco { get; set; }
 
+    // Cédula del familiar (10 dígitos). Opcional.
+    [RegularExpression(@"^\d{10}$", ErrorMessage = "La cédula del familiar debe contener únicamente 10 dígitos numéricos.")]
+    public string? Cedula { get; set; }
+
     // Para HIJO. Si el parentesco es CONYUGE se ignora (se usa FechaUnion).
     public DateTime? FechaNacimiento { get; set; }
 
@@ -75,6 +79,19 @@ public class TituloCrearDto
     [NoSoloEspacios]
     [StringLength(100, MinimumLength = 2, ErrorMessage = "La institución debe tener entre 2 y 100 caracteres.")]
     public string Institucion { get; set; } = null!;
+}
+
+// Un tramo de afiliación al IESS (entrada, salida y cargo de ese tramo).
+public class PeriodoIessCrearDto
+{
+    [Required(ErrorMessage = "La fecha de ingreso al IESS es obligatoria.")]
+    public DateTime? FechaIngreso { get; set; }
+
+    // Null si el período sigue vigente. Solo un período puede quedar abierto.
+    public DateTime? FechaSalida { get; set; }
+
+    [StringLength(100, ErrorMessage = "El cargo IESS no puede superar los 100 caracteres.")]
+    public string? CargoIess { get; set; }
 }
 
 public class CrearUsuarioDto
@@ -155,6 +172,14 @@ public class CrearUsuarioDto
     // Obligatoria (y solo permitida) para contratos EMERGENTE o PRODUCTIVO.
     public DateTime? FechaFinContrato { get; set; }
 
+    // Ver Sectorial en Models/Usuario.cs. Texto libre (código o descripción).
+    [StringLength(60, ErrorMessage = "El sectorial no puede superar los 60 caracteres.")]
+    public string? Sectorial { get; set; }
+
+    // Ver Nacionalidades en Models/OpcionesFijas.cs. Si no se envía, queda ECUATORIANA.
+    [StringLength(30, ErrorMessage = "La nacionalidad no puede superar los 30 caracteres.")]
+    public string? Nacionalidad { get; set; }
+
     public bool RecibeComisiones { get; set; }
     public bool AcumulaDecimos { get; set; }
 
@@ -166,4 +191,5 @@ public class CrearUsuarioDto
     public List<ContactoEmergenciaCrearDto>? ContactosEmergencia { get; set; }
     public List<DatoBancarioCrearDto>? DatosBancarios { get; set; }
     public List<TituloCrearDto>? Titulos { get; set; }
+    public List<PeriodoIessCrearDto>? PeriodosIess { get; set; }
 }

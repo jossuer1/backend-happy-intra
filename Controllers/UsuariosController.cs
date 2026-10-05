@@ -53,7 +53,6 @@ public class UsuariosController : ControllerBase
         var usuarios = await _context.Usuarios
             .Include(u => u.Rol)
             .Include(u => u.Cargo)
-            .Include(u => u.Ciudad)
             .Select(u => new
             {
                 u.IdUsuario,
@@ -64,6 +63,11 @@ public class UsuariosController : ControllerBase
                 Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
                 Area = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
                 Rol = u.Rol != null ? u.Rol.Nombre : null,
+                Ciudad = u.Ciudad != null ? u.Ciudad.Nombre : null,
+                Provincia = u.Ciudad != null ? u.Ciudad.Provincia.Nombre : null,
+                Region = u.Ciudad != null ? u.Ciudad.Provincia.Region.Nombre : null,
+                u.Sectorial,
+                u.Nacionalidad,
                 u.Estado,
                 u.TieneVacaciones,
                 u.PuedeActualizarPerfil,
@@ -110,6 +114,8 @@ public class UsuariosController : ControllerBase
 
             // --- Condición laboral ---
             CargoIess = u.CargoIess,
+            Sectorial = u.Sectorial,
+            Nacionalidad = u.Nacionalidad,
             Jornada = u.Jornada,
             TipoContrato = u.TipoContrato,
             FechaFinContrato = u.FechaFinContrato,
@@ -120,6 +126,8 @@ public class UsuariosController : ControllerBase
             // --- ASIGNAR LOS IDs DE FORMA DIRECTA ---
             IdCargo = u.IdCargo,
             IdCiudad = u.IdCiudad,
+            IdProvincia = u.Ciudad != null ? u.Ciudad.IdProvincia : (long?)null,
+            IdRegion = u.Ciudad != null ? u.Ciudad.Provincia.IdRegion : (long?)null,
             IdGenero = u.IdGenero,
             IdEstadoCivil = u.IdEstadoCivil,
             IdEtnia = u.IdEtnia,
@@ -129,6 +137,8 @@ public class UsuariosController : ControllerBase
             Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
             Departamento = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
             Ciudad = u.Ciudad != null ? u.Ciudad.Nombre : null,
+            Provincia = u.Ciudad != null ? u.Ciudad.Provincia.Nombre : null,
+            Region = u.Ciudad != null ? u.Ciudad.Provincia.Region.Nombre : null,
             Genero = u.Genero != null ? u.Genero.Nombre : null,
             EstadoCivil = u.EstadoCivil != null ? u.EstadoCivil.Nombre : null,
             Etnia = u.Etnia != null ? u.Etnia.Nombre : null,
@@ -141,6 +151,7 @@ public class UsuariosController : ControllerBase
                 Nombre = f.Nombre,
                 Apellido = f.Apellido,
                 Parentesco = f.Parentesco,
+                Cedula = f.Cedula,
                 FechaNacimiento = f.FechaNacimiento,
                 FechaUnion = f.FechaUnion
             }).ToList(),
@@ -170,7 +181,17 @@ public class UsuariosController : ControllerBase
                 NombreTitulo = t.NombreTitulo,
                 Institucion = t.Institucion,
                 FechaObtencion = t.FechaObtencion
-            }).ToList()
+            }).ToList(),
+
+            PeriodosIess = u.PeriodosIess
+                .OrderBy(per => per.FechaIngreso)
+                .Select(per => new PeriodoIessDto
+                {
+                    IdPeriodoIess = per.IdPeriodoIess,
+                    FechaIngreso = per.FechaIngreso,
+                    FechaSalida = per.FechaSalida,
+                    CargoIess = per.CargoIess
+                }).ToList()
         })
         .FirstOrDefaultAsync();
 

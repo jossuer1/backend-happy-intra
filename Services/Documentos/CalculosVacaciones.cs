@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace Intranet.Services.Documentos;
 
 // Reglas de cálculo usadas por los documentos de vacaciones. Están todas aquí,
@@ -9,9 +7,14 @@ public static class CalculosVacaciones
     // Días de vacaciones que se ganan por cada año de servicio (Código del Trabajo, art. 69).
     public const int DiasPorPeriodo = 15;
 
-    private static readonly CultureInfo Es = new("es-EC");
+    // Fijos en código (no CultureInfo("es-EC")) para que no dependan de ICU/globalización del contenedor.
+    private static readonly string[] Meses =
+    {
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    };
 
-    public static string NombreMes(int mes) => Es.DateTimeFormat.GetMonthName(mes).ToLowerInvariant();
+    public static string NombreMes(int mes) => Meses[mes - 1];
 
     // "11 de agosto de 2026"
     public static string FechaLarga(DateTime f) => $"{f.Day} de {NombreMes(f.Month)} de {f.Year}";

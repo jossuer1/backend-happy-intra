@@ -72,6 +72,9 @@ public class TituloActualizarDto
     [StringLength(100)]
     public string? Institucion { get; set; }
 
+    // true = título culminado; false = sigue estudiando (en curso, sin fecha de obtención).
+    public bool Culminado { get; set; } = true;
+
     public DateTime? FechaObtencion { get; set; }
 }
 

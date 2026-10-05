@@ -162,6 +162,16 @@ public class VacacionesController : ControllerBase
         return Ok(resultado.Data);
     }
 
+    // 10.1 Exclusivo RRHH: todas las solicitudes de la empresa, para ver su estado
+    // y descargar los documentos de las aprobadas.
+    [HttpGet("solicitudes/todas")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerTodasLasSolicitudes()
+    {
+        var resultado = await _vacacionService.ObtenerTodasLasSolicitudesAsync();
+        return Ok(resultado.Data);
+    }
+
     // 11. El jefe directo aprueba o rechaza la solicitud de un subordinado.
     // Si aprueba: descuento de días + documentos + correos. Si rechaza, el flujo termina ahí.
     [HttpPatch("solicitudes/{id}/jefe")]

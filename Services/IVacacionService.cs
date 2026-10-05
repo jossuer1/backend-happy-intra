@@ -27,6 +27,9 @@ public interface IVacacionService
     // documentos y se envían por correo al empleado (y se avisa a RRHH).
     Task<ServiceResult<SolicitudVacacionDto>> ResponderComoJefeAsync(long idSolicitud, long idJefe, RespuestaSolicitudVacacionDto dto);
 
+    // RRHH: todas las solicitudes (más recientes primero) para consultar su estado y bajar los documentos.
+    Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerTodasLasSolicitudesAsync();
+
     // Genera (sin guardar en ningún lado) los 3 PDFs de una solicitud aprobada:
     // solicitud, acta y declaración de goce y pago.
     Task<ServiceResult<List<Documentos.DocumentoPdf>>> GenerarDocumentosAsync(long idSolicitud, long idUsuarioQueConsulta, bool esRrhh);

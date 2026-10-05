@@ -36,6 +36,9 @@ public class TituloDto
     public string NombreTitulo { get; set; } = null!;
     public string? Institucion { get; set; }
     public DateTime? FechaObtencion { get; set; }
+
+    // true = culminado; false = en curso (sigue estudiando).
+    public bool Culminado { get; set; } = true;
 }
 
 public class PeriodoIessDto

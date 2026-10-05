@@ -79,6 +79,11 @@ public class TituloCrearDto
     [NoSoloEspacios]
     [StringLength(100, MinimumLength = 2, ErrorMessage = "La institución debe tener entre 2 y 100 caracteres.")]
     public string Institucion { get; set; } = null!;
+
+    // true = título culminado; false = sigue estudiando (en curso, sin fecha de obtención).
+    public bool Culminado { get; set; } = true;
+
+    public DateTime? FechaObtencion { get; set; }
 }
 
 // Un tramo de afiliación al IESS (entrada, salida y cargo de ese tramo).

@@ -1080,6 +1080,9 @@ namespace Intranet.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdTitulo"));
 
+                    b.Property<bool>("Culminado")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("Estado")
                         .HasColumnType("boolean");
 

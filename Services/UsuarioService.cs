@@ -203,7 +203,10 @@ public class UsuarioService : IUsuarioService
             Titulos = dto.Titulos?.Select(t => new Titulo
             {
                 NombreTitulo = t.NombreTitulo,
-                Institucion = t.Institucion
+                Institucion = t.Institucion,
+                Culminado = t.Culminado,
+                // Si sigue estudiando no hay fecha de obtención.
+                FechaObtencion = t.Culminado ? ComoUtc(t.FechaObtencion) : null
             }).ToList() ?? new List<Titulo>(),
 
             PeriodosIess = dto.PeriodosIess?.Select(per => new PeriodoIess
@@ -562,7 +565,8 @@ public class UsuarioService : IUsuarioService
 
                     existente.NombreTitulo = t.NombreTitulo;
                     existente.Institucion = t.Institucion;
-                    existente.FechaObtencion = t.FechaObtencion;
+                    existente.Culminado = t.Culminado;
+                    existente.FechaObtencion = t.Culminado ? ComoUtc(t.FechaObtencion) : null;
                 }
                 else
                 {
@@ -570,7 +574,8 @@ public class UsuarioService : IUsuarioService
                     {
                         NombreTitulo = t.NombreTitulo,
                         Institucion = t.Institucion,
-                        FechaObtencion = t.FechaObtencion,
+                        Culminado = t.Culminado,
+                        FechaObtencion = t.Culminado ? ComoUtc(t.FechaObtencion) : null,
                         Estado = true
                     });
                 }

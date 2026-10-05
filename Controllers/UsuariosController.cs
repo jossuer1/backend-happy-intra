@@ -180,7 +180,8 @@ public class UsuariosController : ControllerBase
                 IdTitulo = t.IdTitulo,
                 NombreTitulo = t.NombreTitulo,
                 Institucion = t.Institucion,
-                FechaObtencion = t.FechaObtencion
+                FechaObtencion = t.FechaObtencion,
+                Culminado = t.Culminado
             }).ToList(),
 
             PeriodosIess = u.PeriodosIess

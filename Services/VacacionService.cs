@@ -456,8 +456,25 @@ public class VacacionService : IVacacionService
         if (solicitud.Estado != EstadoSolicitudVacacion.Aprobada)
             return ServiceResult<List<DocumentoPdf>>.Fallo("Los documentos solo se generan cuando el jefe directo ya aprobó la solicitud.");
 
-        var datos = await ConstruirDatosDocumentosAsync(solicitud);
-        return ServiceResult<List<DocumentoPdf>>.Ok(GenerarPdfs(datos));
+        try
+        {
+            var datos = await ConstruirDatosDocumentosAsync(solicitud);
+            return ServiceResult<List<DocumentoPdf>>.Ok(GenerarPdfs(datos));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al generar los documentos de la solicitud {Id}.", idSolicitud);
+            return ServiceResult<List<DocumentoPdf>>.Fallo("No se pudieron generar los documentos. Inténtalo de nuevo o contacta a soporte.");
+        }
+    }
+
+    public async Task<ServiceResult<List<SolicitudVacacionDto>>> ObtenerTodasLasSolicitudesAsync()
+    {
+        var solicitudes = await ConsultaSolicitudesConIncludes()
+            .OrderByDescending(s => s.FechaSolicitud)
+            .ToListAsync();
+
+        return ServiceResult<List<SolicitudVacacionDto>>.Ok(solicitudes.Select(MapearSolicitudDto).ToList());
     }
 
     private static List<DocumentoPdf> GenerarPdfs(DatosDocumentoVacaciones datos) => new()

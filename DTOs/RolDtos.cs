@@ -38,3 +38,17 @@ public class AsignarRolUsuarioDto
     [Range(1, long.MaxValue, ErrorMessage = "Debe indicar un rol válido.")]
     public long IdRol { get; set; }
 }
+
+// Fila de la lista que usa el ADMIN para asignar roles.
+public class UsuarioRolDto
+{
+    public long IdUsuario { get; set; }
+    public string Cedula { get; set; } = null!;
+    public string Nombre { get; set; } = null!;
+    public string Apellido { get; set; } = null!;
+    public string CorreoEmpresa { get; set; } = null!;
+    public string? Cargo { get; set; }
+    public long? IdRol { get; set; }
+    public string? Rol { get; set; }
+    public bool Estado { get; set; }
+}

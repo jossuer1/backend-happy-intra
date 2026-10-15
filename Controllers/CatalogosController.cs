@@ -40,11 +40,23 @@ public class CatalogosController : ControllerBase
             nacionalidades = Nacionalidades.Todas
         });
 
+    // Los GET públicos solo devuelven registros activos (para los combos). Un ADMIN
+    // puede pedir ?incluirInactivos=true para verlos todos en su pantalla de gestión
+    // (el token se lee aunque el endpoint sea [AllowAnonymous]).
+    private bool VerInactivos(bool incluirInactivos)
+        => incluirInactivos && User.IsInRole("ADMIN");
+
     // --- ÁREAS ---
     [AllowAnonymous]
     [HttpGet("areas")]
-    public async Task<IActionResult> GetAreas()
-        => Ok(await _context.Areas.ToListAsync());
+    public async Task<IActionResult> GetAreas([FromQuery] bool incluirInactivos = false)
+    {
+        var query = _context.Areas.AsNoTracking().AsQueryable();
+        if (!VerInactivos(incluirInactivos))
+            query = query.Where(a => a.Estado);
+
+        return Ok(await query.OrderBy(a => a.Nombre).ToListAsync());
+    }
 
     [HttpPost("areas")]
     [Authorize(Roles = "ADMIN")]
@@ -52,7 +64,7 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.Areas.AnyAsync(a => a.Nombre == nombre))
+        if (await _context.Areas.AnyAsync(a => a.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe un área con ese nombre." });
 
         var area = new Area { Nombre = nombre };
@@ -61,11 +73,43 @@ public class CatalogosController : ControllerBase
         return Ok(area);
     }
 
+    [HttpPut("areas/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateArea(long id, [FromBody] CatalogoActualizarDto dto)
+    {
+        var area = await _context.Areas.FindAsync(id);
+        if (area == null)
+            return NotFound(new { mensaje = "Área no encontrada." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Areas.AnyAsync(a => a.Nombre.ToUpper() == nombre && a.IdArea != id))
+            return BadRequest(new { mensaje = "Ya existe otra área con ese nombre." });
+
+        // Orden del catálogo: no se puede desactivar un área que aún tiene cargos activos.
+        if (!dto.Estado && area.Estado &&
+            await _context.Cargos.AnyAsync(c => c.IdArea == id && c.Estado))
+            return BadRequest(new { mensaje = "No se puede desactivar el área: todavía tiene cargos activos." });
+
+        area.Nombre = nombre;
+        area.Estado = dto.Estado;
+        await _context.SaveChangesAsync();
+        return Ok(area);
+    }
+
     // --- CARGOS ---
     [AllowAnonymous]
     [HttpGet("cargos")]
-    public async Task<IActionResult> GetCargos()
-        => Ok(await _context.Cargos.ToListAsync());
+    public async Task<IActionResult> GetCargos([FromQuery] long? idArea = null, [FromQuery] bool incluirInactivos = false)
+    {
+        var query = _context.Cargos.AsNoTracking().AsQueryable();
+        if (idArea.HasValue)
+            query = query.Where(c => c.IdArea == idArea.Value);
+        if (!VerInactivos(incluirInactivos))
+            query = query.Where(c => c.Estado);
+
+        return Ok(await query.OrderBy(c => c.Nombre).ToListAsync());
+    }
 
     [HttpPost("cargos")]
     [Authorize(Roles = "ADMIN")]
@@ -76,7 +120,7 @@ public class CatalogosController : ControllerBase
         if (!await _context.Areas.AnyAsync(a => a.IdArea == dto.IdArea))
             return BadRequest(new { mensaje = "El área seleccionada no existe." });
 
-        if (await _context.Cargos.AnyAsync(c => c.Nombre == nombre))
+        if (await _context.Cargos.AnyAsync(c => c.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe un cargo con ese nombre." });
 
         var cargo = new Cargo { Nombre = nombre, IdArea = dto.IdArea };
@@ -85,11 +129,40 @@ public class CatalogosController : ControllerBase
         return Ok(cargo);
     }
 
+    [HttpPut("cargos/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateCargo(long id, [FromBody] CargoActualizarDto dto)
+    {
+        var cargo = await _context.Cargos.FindAsync(id);
+        if (cargo == null)
+            return NotFound(new { mensaje = "Cargo no encontrado." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (!await _context.Areas.AnyAsync(a => a.IdArea == dto.IdArea && a.Estado))
+            return BadRequest(new { mensaje = "El área seleccionada no existe o está inactiva." });
+
+        if (await _context.Cargos.AnyAsync(c => c.Nombre.ToUpper() == nombre && c.IdCargo != id))
+            return BadRequest(new { mensaje = "Ya existe otro cargo con ese nombre." });
+
+        cargo.Nombre = nombre;
+        cargo.IdArea = dto.IdArea;
+        cargo.Estado = dto.Estado;
+        await _context.SaveChangesAsync();
+        return Ok(cargo);
+    }
+
     // --- BANCOS ---
     [AllowAnonymous]
     [HttpGet("bancos")]
-    public async Task<IActionResult> GetBancos()
-        => Ok(await _context.Bancos.ToListAsync());
+    public async Task<IActionResult> GetBancos([FromQuery] bool incluirInactivos = false)
+    {
+        var query = _context.Bancos.AsNoTracking().AsQueryable();
+        if (!VerInactivos(incluirInactivos))
+            query = query.Where(b => b.Estado);
+
+        return Ok(await query.OrderBy(b => b.Nombre).ToListAsync());
+    }
 
     [HttpPost("bancos")]
     [Authorize(Roles = "ADMIN")]
@@ -97,11 +170,30 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.Bancos.AnyAsync(b => b.Nombre == nombre))
+        if (await _context.Bancos.AnyAsync(b => b.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe un banco con ese nombre." });
 
         var banco = new Banco { Nombre = nombre };
         _context.Bancos.Add(banco);
+        await _context.SaveChangesAsync();
+        return Ok(banco);
+    }
+
+    [HttpPut("bancos/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateBanco(long id, [FromBody] CatalogoActualizarDto dto)
+    {
+        var banco = await _context.Bancos.FindAsync(id);
+        if (banco == null)
+            return NotFound(new { mensaje = "Banco no encontrado." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Bancos.AnyAsync(b => b.Nombre.ToUpper() == nombre && b.IdBanco != id))
+            return BadRequest(new { mensaje = "Ya existe otro banco con ese nombre." });
+
+        banco.Nombre = nombre;
+        banco.Estado = dto.Estado;
         await _context.SaveChangesAsync();
         return Ok(banco);
     }
@@ -112,18 +204,109 @@ public class CatalogosController : ControllerBase
     public async Task<IActionResult> GetRegiones()
         => Ok(await _context.Regiones.Where(r => r.Estado).ToListAsync());
 
-    // --- PROVINCIAS (solo lectura, catálogo fijo del Ecuador) ---
+    // --- PROVINCIAS ---
+    // Jerarquía: Región → Provincia → Ciudad. Cada provincia pertenece a una región.
+    // Lectura pública (con filtro opcional ?idRegion=); alta/edición solo ADMIN.
     [AllowAnonymous]
     [HttpGet("provincias")]
-    public async Task<IActionResult> GetProvincias()
-        => Ok(await _context.Provincias.Where(p => p.Estado).ToListAsync());
+    public async Task<IActionResult> GetProvincias([FromQuery] long? idRegion = null, [FromQuery] bool incluirInactivos = false)
+    {
+        var query = _context.Provincias.AsNoTracking().AsQueryable();
+        if (idRegion.HasValue)
+            query = query.Where(p => p.IdRegion == idRegion.Value);
+        if (!VerInactivos(incluirInactivos))
+            query = query.Where(p => p.Estado);
+
+        var provincias = await query
+            .OrderBy(p => p.Nombre)
+            .Select(p => new ProvinciaReadDto
+            {
+                IdProvincia = p.IdProvincia,
+                Nombre = p.Nombre,
+                IdRegion = p.IdRegion,
+                NombreRegion = p.Region.Nombre,
+                Estado = p.Estado
+            })
+            .ToListAsync();
+
+        return Ok(provincias);
+    }
+
+    [HttpPost("provincias")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> CreateProvincia([FromBody] ProvinciaCrearDto dto)
+    {
+        if (!await _context.Regiones.AnyAsync(r => r.IdRegion == dto.IdRegion && r.Estado))
+            return BadRequest(new { mensaje = "La región indicada no existe o está inactiva." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Provincias.AnyAsync(p => p.Nombre.ToUpper() == nombre))
+            return BadRequest(new { mensaje = "Ya existe una provincia con ese nombre." });
+
+        var provincia = new Provincia { Nombre = nombre, IdRegion = dto.IdRegion };
+        _context.Provincias.Add(provincia);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ProvinciaReadDto
+        {
+            IdProvincia = provincia.IdProvincia,
+            Nombre = provincia.Nombre,
+            IdRegion = provincia.IdRegion,
+            Estado = provincia.Estado
+        });
+    }
+
+    [HttpPut("provincias/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateProvincia(long id, [FromBody] ProvinciaActualizarDto dto)
+    {
+        var provincia = await _context.Provincias.FindAsync(id);
+        if (provincia == null)
+            return NotFound(new { mensaje = "Provincia no encontrada." });
+
+        if (!await _context.Regiones.AnyAsync(r => r.IdRegion == dto.IdRegion && r.Estado))
+            return BadRequest(new { mensaje = "La región indicada no existe o está inactiva." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Provincias.AnyAsync(p => p.Nombre.ToUpper() == nombre && p.IdProvincia != id))
+            return BadRequest(new { mensaje = "Ya existe otra provincia con ese nombre." });
+
+        // Orden del catálogo: no se puede desactivar una provincia con ciudades activas.
+        if (!dto.Estado && provincia.Estado &&
+            await _context.Ciudades.AnyAsync(c => c.IdProvincia == id && c.Estado))
+            return BadRequest(new { mensaje = "No se puede desactivar la provincia: todavía tiene ciudades activas." });
+
+        provincia.Nombre = nombre;
+        provincia.IdRegion = dto.IdRegion;
+        provincia.Estado = dto.Estado;
+        await _context.SaveChangesAsync();
+
+        return Ok(new ProvinciaReadDto
+        {
+            IdProvincia = provincia.IdProvincia,
+            Nombre = provincia.Nombre,
+            IdRegion = provincia.IdRegion,
+            Estado = provincia.Estado
+        });
+    }
 
     // --- CIUDADES ---
+    // Cada ciudad pertenece a una provincia (y esta a una región). Filtro opcional ?idProvincia=
     [AllowAnonymous]
     [HttpGet("ciudades")]
-    public async Task<ActionResult<IEnumerable<CiudadReadDto>>> GetCiudades()
+    public async Task<ActionResult<IEnumerable<CiudadReadDto>>> GetCiudades(
+        [FromQuery] long? idProvincia = null, [FromQuery] bool incluirInactivos = false)
     {
-        var ciudades = await _context.Ciudades
+        var query = _context.Ciudades.AsNoTracking().AsQueryable();
+        if (idProvincia.HasValue)
+            query = query.Where(c => c.IdProvincia == idProvincia.Value);
+        if (!VerInactivos(incluirInactivos))
+            query = query.Where(c => c.Estado);
+
+        var ciudades = await query
+            .OrderBy(c => c.Nombre)
             .Select(c => new CiudadReadDto
             {
                 IdCiudad = c.IdCiudad,
@@ -134,20 +317,37 @@ public class CatalogosController : ControllerBase
                 {
                     IdProvincia = c.Provincia.IdProvincia,
                     Nombre = c.Provincia.Nombre,
-                    IdRegion = c.Provincia.IdRegion
+                    IdRegion = c.Provincia.IdRegion,
+                    NombreRegion = c.Provincia.Region.Nombre
                 } : null
             })
             .ToListAsync();
 
         return Ok(ciudades);
     }
+
     [AllowAnonymous]
     [HttpGet("ciudades/{id}")]
     public async Task<IActionResult> GetCiudadPorId(long id)
     {
         var ciudad = await _context.Ciudades
-            .Include(c => c.Provincia)
-            .FirstOrDefaultAsync(c => c.IdCiudad == id);
+            .AsNoTracking()
+            .Where(c => c.IdCiudad == id)
+            .Select(c => new CiudadReadDto
+            {
+                IdCiudad = c.IdCiudad,
+                Nombre = c.Nombre,
+                IdProvincia = c.IdProvincia,
+                Estado = c.Estado,
+                Provincia = new ProvinciaSimpleDto
+                {
+                    IdProvincia = c.Provincia.IdProvincia,
+                    Nombre = c.Provincia.Nombre,
+                    IdRegion = c.Provincia.IdRegion,
+                    NombreRegion = c.Provincia.Region.Nombre
+                }
+            })
+            .FirstOrDefaultAsync();
 
         if (ciudad == null)
             return NotFound(new { mensaje = "Ciudad no encontrada." });
@@ -159,13 +359,13 @@ public class CatalogosController : ControllerBase
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> CreateCiudad([FromBody] CiudadCrearDto dto)
     {
-        var provinciaExiste = await _context.Provincias.AnyAsync(p => p.IdProvincia == dto.IdProvincia);
+        var provinciaExiste = await _context.Provincias.AnyAsync(p => p.IdProvincia == dto.IdProvincia && p.Estado);
         if (!provinciaExiste)
-            return BadRequest(new { mensaje = "La provincia indicada no existe." });
+            return BadRequest(new { mensaje = "La provincia indicada no existe o está inactiva." });
 
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.Ciudades.AnyAsync(c => c.Nombre == nombre && c.IdProvincia == dto.IdProvincia))
+        if (await _context.Ciudades.AnyAsync(c => c.Nombre.ToUpper() == nombre && c.IdProvincia == dto.IdProvincia))
             return BadRequest(new { mensaje = "Ya existe una ciudad con ese nombre en la provincia indicada." });
 
         var ciudad = new Ciudad { Nombre = nombre, IdProvincia = dto.IdProvincia };
@@ -182,11 +382,16 @@ public class CatalogosController : ControllerBase
         if (ciudad == null)
             return NotFound(new { mensaje = "Ciudad no encontrada." });
 
-        var provinciaExiste = await _context.Provincias.AnyAsync(p => p.IdProvincia == dto.IdProvincia);
+        var provinciaExiste = await _context.Provincias.AnyAsync(p => p.IdProvincia == dto.IdProvincia && p.Estado);
         if (!provinciaExiste)
-            return BadRequest(new { mensaje = "La provincia indicada no existe." });
+            return BadRequest(new { mensaje = "La provincia indicada no existe o está inactiva." });
 
-        ciudad.Nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+        var nombreCiudad = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Ciudades.AnyAsync(c => c.Nombre.ToUpper() == nombreCiudad && c.IdProvincia == dto.IdProvincia && c.IdCiudad != id))
+            return BadRequest(new { mensaje = "Ya existe una ciudad con ese nombre en la provincia indicada." });
+
+        ciudad.Nombre = nombreCiudad;
         ciudad.IdProvincia = dto.IdProvincia;
         ciudad.Estado = dto.Estado;
         await _context.SaveChangesAsync();
@@ -228,7 +433,7 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.Etnias.AnyAsync(e => e.Nombre == nombre))
+        if (await _context.Etnias.AnyAsync(e => e.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe una etnia con ese nombre." });
 
         var etnia = new Etnia { Nombre = nombre };
@@ -236,6 +441,26 @@ public class CatalogosController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(etnia);
     }
+
+    [HttpPut("etnias/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateEtnia(long id, [FromBody] EtniaActualizarDto dto)
+    {
+        var etnia = await _context.Etnias.FindAsync(id);
+        if (etnia == null)
+            return NotFound(new { mensaje = "Etnia no encontrada." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Etnias.AnyAsync(e => e.Nombre.ToUpper() == nombre && e.IdEtnia != id))
+            return BadRequest(new { mensaje = "Ya existe otra etnia con ese nombre." });
+
+        etnia.Nombre = nombre;
+        etnia.Estado = dto.Estado;
+        await _context.SaveChangesAsync();
+        return Ok(etnia);
+    }
+
     // --- ESTADOS CIVILES ---
     [AllowAnonymous]
     [HttpGet("estados-civiles")]
@@ -259,7 +484,7 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.EstadosCiviles.AnyAsync(e => e.Nombre == nombre))
+        if (await _context.EstadosCiviles.AnyAsync(e => e.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe un estado civil con ese nombre." });
 
         var estadoCivil = new EstadoCivil { Nombre = nombre };
@@ -320,11 +545,30 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.Generos.AnyAsync(g => g.Nombre == nombre))
+        if (await _context.Generos.AnyAsync(g => g.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ya existe un género con ese nombre." });
 
         var genero = new Genero { Nombre = nombre };
         _context.Generos.Add(genero);
+        await _context.SaveChangesAsync();
+        return Ok(genero);
+    }
+
+    [HttpPut("generos/{id}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> UpdateGenero(long id, [FromBody] GeneroActualizarDto dto)
+    {
+        var genero = await _context.Generos.FindAsync(id);
+        if (genero == null)
+            return NotFound(new { mensaje = "Género no encontrado." });
+
+        var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
+
+        if (await _context.Generos.AnyAsync(g => g.Nombre.ToUpper() == nombre && g.IdGenero != id))
+            return BadRequest(new { mensaje = "Ya existe otro género con ese nombre." });
+
+        genero.Nombre = nombre;
+        genero.Estado = dto.Estado;
         await _context.SaveChangesAsync();
         return Ok(genero);
     }
@@ -357,7 +601,7 @@ public class CatalogosController : ControllerBase
     {
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.TiposSangre.AnyAsync(t => t.Nombre == nombre))
+        if (await _context.TiposSangre.AnyAsync(t => t.Nombre.ToUpper() == nombre))
             return BadRequest(new { mensaje = "Ese tipo de sangre ya existe en el catálogo." });
 
         var tipoSangre = new TipoSangre { Nombre = nombre };
@@ -376,7 +620,7 @@ public class CatalogosController : ControllerBase
 
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
-        if (await _context.TiposSangre.AnyAsync(t => t.Nombre == nombre && t.IdTipoSangre != id))
+        if (await _context.TiposSangre.AnyAsync(t => t.Nombre.ToUpper() == nombre && t.IdTipoSangre != id))
             return BadRequest(new { mensaje = "Ya existe otro tipo de sangre con ese nombre." });
 
         tipoSangre.Nombre = nombre;
@@ -403,12 +647,13 @@ public class CatalogosController : ControllerBase
     [HttpGet("formulario-perfil")]
     public async Task<IActionResult> GetCatalogosFormularioPerfil()
     {
-        var areas = await _context.Areas.AsNoTracking().ToListAsync();
-        var cargos = await _context.Cargos.AsNoTracking().ToListAsync();
-        var bancos = await _context.Bancos.AsNoTracking().ToListAsync();
+        var areas = await _context.Areas.AsNoTracking().Where(a => a.Estado).ToListAsync();
+        var cargos = await _context.Cargos.AsNoTracking().Where(c => c.Estado).ToListAsync();
+        var bancos = await _context.Bancos.AsNoTracking().Where(b => b.Estado).ToListAsync();
 
         var ciudades = await _context.Ciudades
             .AsNoTracking()
+            .Where(c => c.Estado)
             .Select(c => new CiudadReadDto
             {
                 IdCiudad = c.IdCiudad,
@@ -419,7 +664,8 @@ public class CatalogosController : ControllerBase
                 {
                     IdProvincia = c.Provincia.IdProvincia,
                     Nombre = c.Provincia.Nombre,
-                    IdRegion = c.Provincia.IdRegion
+                    IdRegion = c.Provincia.IdRegion,
+                    NombreRegion = c.Provincia.Region.Nombre
                 } : null
             })
             .ToListAsync();

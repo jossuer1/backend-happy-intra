@@ -5,6 +5,7 @@ using Intranet.DTOs;
 using Intranet.Models;
 using Intranet.Helpers;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace Intranet.Controllers;
 
@@ -127,9 +128,74 @@ public class RolesController : ControllerBase
         if (!rolExiste)
             return BadRequest(new { mensaje = "El rol seleccionado no existe o está inactivo." });
 
+        // Evita que un ADMIN se quite (o cambie) su propio acceso por accidente.
+        if (usuario.IdUsuario == IdUsuarioActual())
+            return BadRequest(new { mensaje = "No puedes cambiar tu propio rol." });
+
         usuario.IdRol = dto.IdRol;
+        usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return Ok(new { mensaje = $"Rol asignado correctamente al usuario {usuario.Nombre} {usuario.Apellido}." });
+        return Ok(new { mensaje = $"Rol asignado correctamente al usuario {usuario.Nombre} {usuario.Apellido}. El cambio se aplica cuando vuelva a iniciar sesión." });
     }
+
+    // POST: api/Roles/quitar-usuario/5  (deja al usuario sin rol)
+    [HttpPost("quitar-usuario/{idUsuario}")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> QuitarRolAUsuario(long idUsuario)
+    {
+        var usuario = await _context.Usuarios.FindAsync(idUsuario);
+        if (usuario == null)
+            return NotFound(new { mensaje = "El usuario indicado no existe." });
+
+        if (usuario.IdUsuario == IdUsuarioActual())
+            return BadRequest(new { mensaje = "No puedes quitarte tu propio rol." });
+
+        usuario.IdRol = null;
+        usuario.FechaActualizacion = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { mensaje = $"Se quitó el rol al usuario {usuario.Nombre} {usuario.Apellido}." });
+    }
+
+    // GET: api/Roles/usuarios?buscar=juan
+    // Lista de usuarios (con su rol actual) para que el ADMIN elija a quién asignarle un rol.
+    // GET /api/Usuarios es solo de RRHH, por eso este endpoint aparte.
+    [HttpGet("usuarios")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<ActionResult<IEnumerable<UsuarioRolDto>>> GetUsuariosConRol([FromQuery] string? buscar = null)
+    {
+        var query = _context.Usuarios.AsNoTracking().AsQueryable();
+
+        var texto = buscar?.Trim().ToLower();
+        if (!string.IsNullOrEmpty(texto))
+        {
+            query = query.Where(u =>
+                u.Nombre.ToLower().Contains(texto) ||
+                u.Apellido.ToLower().Contains(texto) ||
+                u.Cedula.Contains(texto) ||
+                u.CorreoEmpresa.ToLower().Contains(texto));
+        }
+
+        var usuarios = await query
+            .OrderBy(u => u.Apellido).ThenBy(u => u.Nombre)
+            .Select(u => new UsuarioRolDto
+            {
+                IdUsuario = u.IdUsuario,
+                Cedula = u.Cedula,
+                Nombre = u.Nombre,
+                Apellido = u.Apellido,
+                CorreoEmpresa = u.CorreoEmpresa,
+                Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                IdRol = u.IdRol,
+                Rol = u.Rol != null ? u.Rol.Nombre : null,
+                Estado = u.Estado
+            })
+            .ToListAsync();
+
+        return Ok(usuarios);
+    }
+
+    private long? IdUsuarioActual()
+        => long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
 }

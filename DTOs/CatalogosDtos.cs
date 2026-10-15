@@ -51,6 +51,7 @@ public class ProvinciaSimpleDto
     public long IdProvincia { get; set; }
     public string Nombre { get; set; } = null!;
     public long IdRegion { get; set; }
+    public string? NombreRegion { get; set; }
 }
 
 public class CiudadActualizarDto
@@ -150,5 +151,68 @@ public class TipoSangreReadDto
 {
     public long IdTipoSangre { get; set; }
     public string Nombre { get; set; } = null!;
+    public bool Estado { get; set; }
+}
+
+
+// --- Genérico de edición para Áreas y Bancos (Nombre + Estado) ---
+public class CatalogoActualizarDto
+{
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "El nombre debe tener entre 2 y 100 caracteres.")]
+    public string Nombre { get; set; } = null!;
+
+    public bool Estado { get; set; } = true;
+}
+
+// --- CARGO (edición) ---
+public class CargoActualizarDto
+{
+    [Required(ErrorMessage = "El nombre del cargo es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "El nombre debe tener entre 2 y 100 caracteres.")]
+    public string Nombre { get; set; } = null!;
+
+    [Required(ErrorMessage = "El área es obligatoria.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe seleccionar un área válida.")]
+    public long IdArea { get; set; }
+
+    public bool Estado { get; set; } = true;
+}
+
+// --- PROVINCIA (pertenece a una región) ---
+public class ProvinciaCrearDto
+{
+    [Required(ErrorMessage = "El nombre de la provincia es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "El nombre de la provincia debe tener entre 2 y 100 caracteres.")]
+    public string Nombre { get; set; } = null!;
+
+    [Required(ErrorMessage = "La región es obligatoria.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe seleccionar una región válida.")]
+    public long IdRegion { get; set; }
+}
+
+public class ProvinciaActualizarDto
+{
+    [Required(ErrorMessage = "El nombre de la provincia es obligatorio.")]
+    [NoSoloEspacios]
+    [StringLength(100, MinimumLength = 2, ErrorMessage = "El nombre de la provincia debe tener entre 2 y 100 caracteres.")]
+    public string Nombre { get; set; } = null!;
+
+    [Required(ErrorMessage = "La región es obligatoria.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Debe seleccionar una región válida.")]
+    public long IdRegion { get; set; }
+
+    public bool Estado { get; set; } = true;
+}
+
+public class ProvinciaReadDto
+{
+    public long IdProvincia { get; set; }
+    public string Nombre { get; set; } = null!;
+    public long IdRegion { get; set; }
+    public string? NombreRegion { get; set; }
     public bool Estado { get; set; }
 }

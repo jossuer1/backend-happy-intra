@@ -26,6 +26,9 @@ builder.Services.AddScoped<ICloudinaryUploadService, CloudinaryUploadService>();
 
 builder.Services.AddScoped<IVacacionService, VacacionService>();
 
+builder.Services.AddScoped<PerfilPropioAplicador>();
+builder.Services.AddScoped<ISolicitudPerfilService, SolicitudPerfilService>();
+
 builder.Services.AddHostedService<CumpleanosBackgroundService>();
 
 builder.Services.AddCors(options =>

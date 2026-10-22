@@ -210,9 +210,36 @@ public class ActualizarUsuarioDto
 
 // RRHH usa este DTO para habilitar/deshabilitar la ventana de autoedición
 // de perfil de un empleado (PATCH /api/Usuarios/{id}/permiso-actualizacion).
+// Al habilitar, FechaLimite es obligatoria: el empleado puede enviar sus cambios
+// hasta el final de ese día (hora de Ecuador).
 public class PermisoActualizarPerfilDto
 {
     public bool Habilitar { get; set; }
+
+    public DateTime? FechaLimite { get; set; }
+}
+
+// RRHH habilita la ventana a varios empleados de una sola vez
+// (POST /api/Usuarios/habilitar-actualizacion). O bien TodosActivos = true,
+// o bien una lista de IdsUsuarios (nunca ambos vacíos). Solo afecta a usuarios activos.
+public class HabilitarActualizacionMasivaDto
+{
+    public bool TodosActivos { get; set; }
+
+    public List<long>? IdsUsuarios { get; set; }
+
+    [Required(ErrorMessage = "La fecha límite es obligatoria.")]
+    public DateTime? FechaLimite { get; set; }
+}
+
+public class HabilitarActualizacionMasivaResultadoDto
+{
+    public int Habilitados { get; set; }
+
+    // Activos que se omitieron porque ya tienen una solicitud pendiente de revisión.
+    public int OmitidosPorSolicitudPendiente { get; set; }
+
+    public DateTime FechaLimite { get; set; }
 }
 
 // RRHH usa este DTO para activar/desactivar la cuenta de un empleado
@@ -223,10 +250,14 @@ public class ActualizarEstadoUsuarioDto
     public bool Activar { get; set; }
 }
 
-// Subconjunto de datos que el propio empleado puede editar cuando RRHH le
-// habilita el permiso (PUT /api/Usuarios/mi-perfil). Deliberadamente NO
-// incluye cédula, correos, cargo, ciudad, rol ni beneficio de vacaciones:
-// esos campos siguen siendo exclusivos de RRHH vía el PUT /api/Usuarios/{id}.
+// Subconjunto de datos que el propio empleado puede proponer cuando RRHH le
+// habilita la ventana de edición (PUT /api/Usuarios/mi-perfil). Los cambios NO se
+// aplican al instante: quedan como solicitud pendiente hasta que RRHH los apruebe.
+// Deliberadamente NO incluye cédula, nombre, cargo, ciudad, rol, tipo de sangre,
+// datos bancarios ni nada laboral: eso sigue siendo exclusivo de RRHH vía
+// PUT /api/Usuarios/{id}. La foto tampoco va aquí: se sube al instante con
+// POST /api/Usuarios/{id}/foto.
+// Regla de los campos escalares: null = "no cambiar".
 public class ActualizarPerfilPropioDto
 {
     [Phone(ErrorMessage = "El celular personal no tiene un formato válido.")]
@@ -240,13 +271,18 @@ public class ActualizarPerfilPropioDto
     [StringLength(150, ErrorMessage = "La dirección no puede superar los 150 caracteres.")]
     public string? Direccion { get; set; }
 
-    [StringLength(500, ErrorMessage = "La URL de la imagen no puede superar los 500 caracteres.")]
-    public string? UrlImagenPerfil { get; set; }
+    [EmailAddress(ErrorMessage = "El formato del correo personal no es válido.")]
+    [StringLength(100, ErrorMessage = "El correo personal no puede superar los 100 caracteres.")]
+    public string? CorreoPersonal { get; set; }
+
+    public long? IdEstadoCivil { get; set; }
 
     // --- Subrecursos que también puede mantener el propio empleado ---
     public List<FamiliarActualizarDto>? Familiares { get; set; }
     public List<ContactoEmergenciaActualizarDto>? ContactosEmergencia { get; set; }
+    public List<TituloActualizarDto>? Titulos { get; set; }
 
     public List<long>? FamiliaresAEliminar { get; set; }
     public List<long>? ContactosEmergenciaAEliminar { get; set; }
+    public List<long>? TitulosAEliminar { get; set; }
 }

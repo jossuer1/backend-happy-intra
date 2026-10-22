@@ -9,14 +9,15 @@ public interface IUsuarioService
 
     Task<ServiceResult<bool>> ActualizarUsuarioAsync(long id, ActualizarUsuarioDto dto);
 
-    // RRHH habilita/deshabilita la ventana de autoedición de perfil.
-    Task<ServiceResult<bool>> ActualizarPermisoPerfilAsync(long id, bool habilitar);
+    // RRHH habilita/deshabilita la ventana de autoedición de perfil de un empleado.
+    // Al habilitar exige fecha límite y avisa por correo al empleado.
+    Task<ServiceResult<bool>> ActualizarPermisoPerfilAsync(long id, bool habilitar, DateTime? fechaLimite);
+
+    // RRHH habilita la ventana a todos los activos o a una lista de usuarios, con una misma fecha límite.
+    Task<ServiceResult<HabilitarActualizacionMasivaResultadoDto>> HabilitarActualizacionMasivaAsync(
+        HabilitarActualizacionMasivaDto dto);
 
     // RRHH activa o desactiva la cuenta de un usuario. Uno desactivado no
     // puede iniciar sesión ni cambiar su contraseña (ver AuthService).
     Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar);
-
-    // El propio usuario edita su información cuando RRHH le habilitó el permiso.
-    // El permiso se consume (vuelve a false) apenas se guarda con éxito.
-    Task<ServiceResult<bool>> ActualizarPerfilPropioAsync(long idUsuario, ActualizarPerfilPropioDto dto);
 }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
 using Intranet.DTOs;
+using Intranet.Models;
 using Intranet.Services;
 
 namespace Intranet.Controllers;
@@ -16,6 +17,7 @@ public class UsuariosController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IUsuarioService _usuarioService;
+    private readonly ISolicitudPerfilService _solicitudPerfilService;
     private readonly IImagenPerfilService _imagenPerfilService;
 
     private static readonly string[] TiposImagenPermitidos =
@@ -25,10 +27,12 @@ public class UsuariosController : ControllerBase
     public UsuariosController(
         AppDbContext context,
         IUsuarioService usuarioService,
+        ISolicitudPerfilService solicitudPerfilService,
         IImagenPerfilService imagenPerfilService)
     {
         _context = context;
         _usuarioService = usuarioService;
+        _solicitudPerfilService = solicitudPerfilService;
         _imagenPerfilService = imagenPerfilService;
     }
 
@@ -50,6 +54,7 @@ public class UsuariosController : ControllerBase
     [Authorize(Roles = "RRHH")]
     public async Task<IActionResult> GetTodosLosUsuarios()
     {
+        var ahora = DateTime.UtcNow;
         var usuarios = await _context.Usuarios
             .Include(u => u.Rol)
             .Include(u => u.Cargo)
@@ -70,7 +75,11 @@ public class UsuariosController : ControllerBase
                 u.Nacionalidad,
                 u.Estado,
                 u.TieneVacaciones,
-                u.PuedeActualizarPerfil,
+                PuedeActualizarPerfil = u.PuedeActualizarPerfil &&
+                    (u.PuedeActualizarHasta == null || u.PuedeActualizarHasta > ahora),
+                u.PuedeActualizarHasta,
+                TieneSolicitudPendiente = u.SolicitudesCambioPerfil
+                    .Any(sp => sp.Estado == EstadoSolicitudCambioPerfil.Pendiente),
                 u.EsJefe
             })
             .ToListAsync();
@@ -90,6 +99,7 @@ public class UsuariosController : ControllerBase
         {
             return Forbid(); // Retorna 403 Forbidden
         }
+        var ahora = DateTime.UtcNow;
         var perfil = await _context.Usuarios
         .Where(u => u.IdUsuario == id)
         .Select(u => new PerfilDto
@@ -110,7 +120,11 @@ public class UsuariosController : ControllerBase
             DiasVacacionesAsignados = u.DiasVacacionesAsignados,
             Estado = u.Estado,
             Rol = u.Rol != null ? u.Rol.Nombre : null,
-            PuedeActualizarPerfil = u.PuedeActualizarPerfil,
+            PuedeActualizarPerfil = u.PuedeActualizarPerfil &&
+                (u.PuedeActualizarHasta == null || u.PuedeActualizarHasta > ahora),
+            PuedeActualizarHasta = u.PuedeActualizarHasta,
+            TieneSolicitudPendiente = u.SolicitudesCambioPerfil
+                .Any(sp => sp.Estado == EstadoSolicitudCambioPerfil.Pendiente),
 
             // --- Condición laboral ---
             CargoIess = u.CargoIess,
@@ -267,17 +281,22 @@ public class UsuariosController : ControllerBase
         });
     }
 
-    // Solo RRHH: habilita (o revoca) que el propio empleado pueda editar su
-    // perfil una vez, vía PUT /api/Usuarios/mi-perfil. El permiso se consume
-    // automáticamente al primer guardado exitoso del empleado.
+    // Solo RRHH: habilita (o revoca) la ventana en la que el propio empleado puede
+    // proponer cambios a su perfil (PUT /api/Usuarios/mi-perfil). Al habilitar hay que
+    // indicar la fecha límite; el empleado recibe un correo con esa fecha.
     [HttpPatch("{id}/permiso-actualizacion")]
     [Authorize(Roles = "RRHH")]
     public async Task<IActionResult> ActualizarPermisoPerfil(long id, [FromBody] PermisoActualizarPerfilDto dto)
     {
-        var resultado = await _usuarioService.ActualizarPermisoPerfilAsync(id, dto.Habilitar);
+        var resultado = await _usuarioService.ActualizarPermisoPerfilAsync(id, dto.Habilitar, dto.FechaLimite);
 
         if (!resultado.Exito)
-            return NotFound(new { mensaje = resultado.Mensaje });
+        {
+            if (resultado.Mensaje == "Usuario no encontrado.")
+                return NotFound(new { mensaje = resultado.Mensaje });
+
+            return BadRequest(new { mensaje = resultado.Mensaje });
+        }
 
         return Ok(new
         {
@@ -287,20 +306,42 @@ public class UsuariosController : ControllerBase
         });
     }
 
-    // El empleado logueado edita su propia información de contacto, familiares
-    // y contactos de emergencia, solo si RRHH le habilitó el permiso. No requiere
-    // rol RRHH: cualquier usuario autenticado puede llamarlo, pero solo surte
-    // efecto si PuedeActualizarPerfil está en true (lo valida el service).
-    [HttpPut("mi-perfil")]
-    public async Task<IActionResult> ActualizarMiPerfil([FromBody] ActualizarPerfilPropioDto dto)
+    // Solo RRHH: habilita la ventana a todos los usuarios activos (TodosActivos = true)
+    // o a una lista (IdsUsuarios), con una misma fecha límite. Se omiten quienes ya
+    // tienen una solicitud pendiente de revisión.
+    [HttpPost("habilitar-actualizacion")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> HabilitarActualizacionMasiva([FromBody] HabilitarActualizacionMasivaDto dto)
     {
-        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var resultado = await _usuarioService.ActualizarPerfilPropioAsync(currentUserId, dto);
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var resultado = await _usuarioService.HabilitarActualizacionMasivaAsync(dto);
 
         if (!resultado.Exito)
             return BadRequest(new { mensaje = resultado.Mensaje });
 
-        return Ok(new { mensaje = "Perfil actualizado exitosamente." });
+        return Ok(resultado.Data);
+    }
+
+    // El empleado logueado propone cambios a su información (contacto, estado civil,
+    // familiares, contactos de emergencia y títulos). NO se aplican al instante: quedan
+    // como solicitud pendiente hasta que RRHH las apruebe o rechace. Solo funciona
+    // mientras RRHH tenga habilitada su ventana de edición y no haya vencido el plazo.
+    [HttpPut("mi-perfil")]
+    public async Task<IActionResult> ActualizarMiPerfil([FromBody] ActualizarPerfilPropioDto dto)
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _solicitudPerfilService.EnviarAsync(currentUserId, dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Accepted(new
+        {
+            idSolicitud = resultado.Data,
+            mensaje = "Tus cambios fueron enviados a RRHH para su revisión."
+        });
     }
 
     // Sube/reemplaza la foto de perfil en Cloudinary y guarda la URL resultante.

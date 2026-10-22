@@ -15,12 +15,15 @@ public class UsuarioService : IUsuarioService
     private readonly AppDbContext _context;
     private readonly IEmailService _emailService;
     private readonly IConfiguration _config;
+    private readonly ILogger<UsuarioService> _logger;
 
-    public UsuarioService(AppDbContext context, IEmailService emailService, IConfiguration config)
+    public UsuarioService(AppDbContext context, IEmailService emailService, IConfiguration config,
+        ILogger<UsuarioService> logger)
     {
         _context = context;
         _emailService = emailService;
         _config = config;
+        _logger = logger;
     }
 
     public async Task<ServiceResult<UsuarioCreadoDto>> CrearUsuarioAsync(CrearUsuarioDto dto)
@@ -671,17 +674,142 @@ public class UsuarioService : IUsuarioService
     }
 
     // RRHH habilita (o revoca) la ventana de autoedición de perfil de un empleado.
-    public async Task<ServiceResult<bool>> ActualizarPermisoPerfilAsync(long id, bool habilitar)
+    // Al habilitar, la fecha límite es obligatoria y el empleado recibe un correo
+    // avisándole hasta cuándo puede actualizar su información.
+    public async Task<ServiceResult<bool>> ActualizarPermisoPerfilAsync(long id, bool habilitar, DateTime? fechaLimite)
     {
         var usuario = await _context.Usuarios.FindAsync(id);
         if (usuario == null)
             return ServiceResult<bool>.Fallo("Usuario no encontrado.");
 
-        usuario.PuedeActualizarPerfil = habilitar;
+        if (!habilitar)
+        {
+            usuario.PuedeActualizarPerfil = false;
+            usuario.PuedeActualizarHasta = null;
+            usuario.FechaActualizacion = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return ServiceResult<bool>.Ok(true);
+        }
+
+        var errorFecha = ValidarFechaLimite(fechaLimite);
+        if (errorFecha != null)
+            return ServiceResult<bool>.Fallo(errorFecha);
+
+        if (!usuario.Estado)
+            return ServiceResult<bool>.Fallo("No se puede habilitar la edición de un usuario inactivo.");
+
+        if (await _context.SolicitudesCambioPerfil.AnyAsync(s =>
+                s.IdUsuario == id && s.Estado == EstadoSolicitudCambioPerfil.Pendiente))
+            return ServiceResult<bool>.Fallo(
+                "Este usuario tiene una solicitud de cambios pendiente de revisión. Resuélvela antes de habilitar una nueva actualización.");
+
+        var limite = FechasEcuador.FinDelDiaEnUtc(fechaLimite!.Value);
+        usuario.PuedeActualizarPerfil = true;
+        usuario.PuedeActualizarHasta = limite;
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
+        await EnviarAvisoVentanaAsync(
+            new[] { (usuario.Nombre, usuario.Apellido, usuario.CorreoEmpresa, usuario.CorreoPersonal) }, limite);
+
         return ServiceResult<bool>.Ok(true);
+    }
+
+    // RRHH habilita la ventana a todos los activos o a una lista, con la misma fecha límite.
+    // Se hace con una sola consulta (no 60 llamadas) y se omiten quienes ya tienen una
+    // solicitud pendiente: su ventana se reabre sola cuando RRHH la resuelva.
+    public async Task<ServiceResult<HabilitarActualizacionMasivaResultadoDto>> HabilitarActualizacionMasivaAsync(
+        HabilitarActualizacionMasivaDto dto)
+    {
+        var errorFecha = ValidarFechaLimite(dto.FechaLimite);
+        if (errorFecha != null)
+            return ServiceResult<HabilitarActualizacionMasivaResultadoDto>.Fallo(errorFecha);
+
+        var ids = dto.IdsUsuarios?.Distinct().ToList() ?? new List<long>();
+        if (!dto.TodosActivos && ids.Count == 0)
+            return ServiceResult<HabilitarActualizacionMasivaResultadoDto>.Fallo(
+                "Indica TodosActivos = true o al menos un usuario en IdsUsuarios.");
+
+        var limite = FechasEcuador.FinDelDiaEnUtc(dto.FechaLimite!.Value);
+
+        var objetivo = _context.Usuarios.Where(u => u.Estado);
+        if (!dto.TodosActivos)
+            objetivo = objetivo.Where(u => ids.Contains(u.IdUsuario));
+
+        var conPendiente = objetivo.Where(u => u.SolicitudesCambioPerfil
+            .Any(s => s.Estado == EstadoSolicitudCambioPerfil.Pendiente));
+        var omitidos = await conPendiente.CountAsync();
+
+        var elegibles = objetivo.Where(u => !u.SolicitudesCambioPerfil
+            .Any(s => s.Estado == EstadoSolicitudCambioPerfil.Pendiente));
+
+        var destinatarios = await elegibles
+            .Select(u => new { u.Nombre, u.Apellido, u.CorreoEmpresa, u.CorreoPersonal })
+            .ToListAsync();
+
+        var ahora = DateTime.UtcNow;
+        var habilitados = await elegibles.ExecuteUpdateAsync(set => set
+            .SetProperty(u => u.PuedeActualizarPerfil, true)
+            .SetProperty(u => u.PuedeActualizarHasta, (DateTime?)limite)
+            .SetProperty(u => u.FechaActualizacion, ahora));
+
+        await EnviarAvisoVentanaAsync(
+            destinatarios.Select(d => (d.Nombre, d.Apellido, d.CorreoEmpresa, d.CorreoPersonal)), limite);
+
+        return ServiceResult<HabilitarActualizacionMasivaResultadoDto>.Ok(new HabilitarActualizacionMasivaResultadoDto
+        {
+            Habilitados = habilitados,
+            OmitidosPorSolicitudPendiente = omitidos,
+            FechaLimite = limite
+        });
+    }
+
+    // La fecha límite debe existir y no ser anterior a hoy (hora de Ecuador).
+    private static string? ValidarFechaLimite(DateTime? fechaLimite)
+    {
+        if (!fechaLimite.HasValue)
+            return "La fecha límite es obligatoria al habilitar la actualización.";
+
+        if (fechaLimite.Value.Date < FechasEcuador.Hoy())
+            return "La fecha límite no puede ser anterior a hoy.";
+
+        return null;
+    }
+
+    // Avisa por correo (hasta 5 envíos en paralelo) que ya pueden actualizar su información.
+    // Un fallo de correo no deshace la habilitación: solo se registra en el log.
+    private async Task EnviarAvisoVentanaAsync(
+        IEnumerable<(string Nombre, string Apellido, string? CorreoEmpresa, string? CorreoPersonal)> destinatarios,
+        DateTime limiteUtc)
+    {
+        var urlIntranet = _config["Intranet:UrlBase"] ?? "https://intranet.happypay.com";
+        var fecha = FechasEcuador.FechaLarga(limiteUtc);
+
+        await Parallel.ForEachAsync(
+            destinatarios,
+            new ParallelOptions { MaxDegreeOfParallelism = 5 },
+            async (d, _) =>
+            {
+                var correo = string.IsNullOrWhiteSpace(d.CorreoEmpresa) ? d.CorreoPersonal : d.CorreoEmpresa;
+                if (string.IsNullOrWhiteSpace(correo))
+                    return;
+
+                try
+                {
+                    var ok = await _emailService.SendEmailAsync(
+                        correo,
+                        $"{d.Nombre} {d.Apellido}",
+                        "Actualiza tu información en la intranet",
+                        PlantillasCorreo.ActualizacionPerfilHabilitada(d.Nombre, fecha, urlIntranet));
+
+                    if (!ok)
+                        _logger.LogWarning("No se pudo enviar el aviso de actualización de perfil a {Correo}.", correo);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error enviando el aviso de actualización de perfil a {Correo}.", correo);
+                }
+            });
     }
 
     // RRHH activa o desactiva la cuenta de un usuario. Un usuario inactivo no
@@ -696,155 +824,11 @@ public class UsuarioService : IUsuarioService
 
         usuario.Estado = activar;
         if (!activar)
+        {
             usuario.PuedeActualizarPerfil = false;
-
-        usuario.FechaActualizacion = DateTime.UtcNow;
-        await _context.SaveChangesAsync();
-
-        return ServiceResult<bool>.Ok(true);
-    }
-
-    // El propio usuario edita su información, solo si RRHH le habilitó el
-    // permiso. Es un permiso "de un solo uso": se consume automáticamente
-    // al guardar con éxito, para que el usuario no quede con edición libre
-    // permanente y RRHH deba volver a habilitarla cada vez que haga falta.
-    public async Task<ServiceResult<bool>> ActualizarPerfilPropioAsync(long idUsuario, ActualizarPerfilPropioDto dto)
-    {
-        var usuario = await _context.Usuarios
-            .Include(u => u.Familiares)
-            .Include(u => u.ContactosEmergencia)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(u => u.IdUsuario == idUsuario);
-
-        if (usuario == null)
-            return ServiceResult<bool>.Fallo("Usuario no encontrado.");
-
-        if (!usuario.PuedeActualizarPerfil)
-            return ServiceResult<bool>.Fallo(
-                "No tienes habilitada la edición de tu perfil en este momento. Pídele a RRHH que la active.");
-
-        var errorFamiliares = NormalizarYValidarFamiliares(dto.Familiares);
-        if (errorFamiliares != null)
-            return ServiceResult<bool>.Fallo(errorFamiliares);
-
-        // --- Normalización (mismas reglas que en el resto del sistema) ---
-        dto.CelularEmpresa = TextoHelper.SoloTrim(dto.CelularEmpresa);
-        dto.CelularPersonal = TextoHelper.SoloTrim(dto.CelularPersonal);
-        dto.Direccion = TextoHelper.AMayusculas(dto.Direccion);
-
-        if (dto.CelularEmpresa != null) usuario.CelularEmpresa = dto.CelularEmpresa;
-        if (dto.CelularPersonal != null) usuario.CelularPersonal = dto.CelularPersonal;
-        if (dto.Direccion != null) usuario.Direccion = dto.Direccion;
-        if (dto.UrlImagenPerfil != null) usuario.UrlImagenPerfil = dto.UrlImagenPerfil;
-
-        // --- Familiares (mismo upsert por Id que usa RRHH) ---
-        if (dto.FamiliaresAEliminar is { Count: > 0 })
-        {
-            var aEliminar = usuario.Familiares.Where(f => dto.FamiliaresAEliminar.Contains(f.IdFamiliar)).ToList();
-            foreach (var f in aEliminar)
-            {
-                usuario.Familiares.Remove(f);
-                _context.Remove(f);
-            }
+            usuario.PuedeActualizarHasta = null;
         }
 
-        if (dto.Familiares is { Count: > 0 })
-        {
-            foreach (var f in dto.Familiares)
-            {
-                f.Nombre = TextoHelper.AMayusculasObligatorio(f.Nombre);
-                f.Apellido = TextoHelper.AMayusculas(f.Apellido);
-                f.Parentesco = TextoHelper.AMayusculas(f.Parentesco);
-                f.Cedula = NormalizarCedulaOpcional(f.Cedula);
-
-                if (f.IdFamiliar is long idF && idF > 0)
-                {
-                    var existente = usuario.Familiares.FirstOrDefault(x => x.IdFamiliar == idF);
-                    if (existente == null)
-                        return ServiceResult<bool>.Fallo($"El familiar con id {idF} no te pertenece.");
-
-                    existente.Nombre = f.Nombre;
-                    existente.Apellido = f.Apellido;
-                    existente.Parentesco = f.Parentesco;
-                    existente.Cedula = f.Cedula;
-                    existente.FechaNacimiento = f.FechaNacimiento;
-                    existente.FechaUnion = ComoUtc(f.FechaUnion);
-                }
-                else
-                {
-                    usuario.Familiares.Add(new Familiar
-                    {
-                        Nombre = f.Nombre,
-                        Apellido = f.Apellido,
-                        Parentesco = f.Parentesco,
-                        Cedula = f.Cedula,
-                        FechaNacimiento = f.FechaNacimiento,
-                        FechaUnion = ComoUtc(f.FechaUnion),
-                        Estado = true
-                    });
-                }
-            }
-        }
-
-        // Un empleado solo puede tener un cónyuge (se revisa sobre el resultado final).
-        if (usuario.Familiares.Count(f => f.Estado && f.Parentesco == Parentescos.Conyuge) > 1)
-            return ServiceResult<bool>.Fallo("Un empleado solo puede tener un cónyuge registrado.");
-
-        var errorCedulasFamiliares = ValidarCedulasFamiliares(
-            usuario.Familiares.Where(f => f.Estado).Select(f => f.Cedula), usuario.Cedula);
-        if (errorCedulasFamiliares != null)
-            return ServiceResult<bool>.Fallo(errorCedulasFamiliares);
-
-        // --- Contactos de emergencia (mismo upsert por Id que usa RRHH) ---
-        if (dto.ContactosEmergenciaAEliminar is { Count: > 0 })
-        {
-            var aEliminar = usuario.ContactosEmergencia.Where(c => dto.ContactosEmergenciaAEliminar.Contains(c.IdContacto)).ToList();
-            foreach (var c in aEliminar)
-            {
-                usuario.ContactosEmergencia.Remove(c);
-                _context.Remove(c);
-            }
-        }
-
-        if (dto.ContactosEmergencia is { Count: > 0 })
-        {
-            foreach (var c in dto.ContactosEmergencia)
-            {
-                c.Nombre = TextoHelper.AMayusculasObligatorio(c.Nombre);
-                c.Apellido = TextoHelper.AMayusculas(c.Apellido);
-                c.Parentesco = TextoHelper.AMayusculas(c.Parentesco);
-                c.Telefono = TextoHelper.SoloTrim(c.Telefono);
-                c.Direccion = TextoHelper.AMayusculas(c.Direccion);
-
-                if (c.IdContacto is long idC && idC > 0)
-                {
-                    var existente = usuario.ContactosEmergencia.FirstOrDefault(x => x.IdContacto == idC);
-                    if (existente == null)
-                        return ServiceResult<bool>.Fallo($"El contacto de emergencia con id {idC} no te pertenece.");
-
-                    existente.Nombre = c.Nombre;
-                    existente.Apellido = c.Apellido;
-                    existente.Parentesco = c.Parentesco;
-                    existente.Telefono = c.Telefono;
-                    existente.Direccion = c.Direccion;
-                }
-                else
-                {
-                    usuario.ContactosEmergencia.Add(new ContactoEmergencia
-                    {
-                        Nombre = c.Nombre,
-                        Apellido = c.Apellido,
-                        Parentesco = c.Parentesco,
-                        Telefono = c.Telefono,
-                        Direccion = c.Direccion,
-                        Estado = true
-                    });
-                }
-            }
-        }
-
-        // El permiso se consume: vuelve a quedar en false hasta que RRHH lo reactive.
-        usuario.PuedeActualizarPerfil = false;
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
@@ -853,7 +837,7 @@ public class UsuarioService : IUsuarioService
 
     // Las fechas de estos campos son solo "día" y la columna es timestamptz: se marcan
     // como UTC (igual que en VacacionService) para que Npgsql no rechace un Kind sin definir.
-    private static DateTime? ComoUtc(DateTime? fecha)
+    internal static DateTime? ComoUtc(DateTime? fecha)
         => fecha.HasValue ? DateTime.SpecifyKind(fecha.Value, DateTimeKind.Utc) : null;
 
     // Resuelve un valor de lista fija: (null, null) si no se informó; (valor canónico, null)
@@ -895,7 +879,7 @@ public class UsuarioService : IUsuarioService
     // Lleva el parentesco de cada familiar a su valor canónico (CONYUGE o HIJO) y aplica
     // la regla de fechas: el cónyuge usa FechaUnion (su FechaNacimiento se descarta) y
     // los hijos no pueden traer FechaUnion. Devuelve un mensaje de error o null.
-    private static string? NormalizarYValidarFamiliares(IEnumerable<IFamiliarEntrada>? familiares)
+    internal static string? NormalizarYValidarFamiliares(IEnumerable<IFamiliarEntrada>? familiares)
     {
         if (familiares == null)
             return null;
@@ -918,7 +902,7 @@ public class UsuarioService : IUsuarioService
     }
 
     // Cédula opcional de un familiar: se recorta y, si queda vacía, se guarda como null.
-    private static string? NormalizarCedulaOpcional(string? cedula)
+    internal static string? NormalizarCedulaOpcional(string? cedula)
     {
         var limpia = TextoHelper.SoloTrim(cedula);
         return string.IsNullOrEmpty(limpia) ? null : limpia;
@@ -926,7 +910,7 @@ public class UsuarioService : IUsuarioService
 
     // Las cédulas informadas de los familiares no pueden repetirse entre sí ni coincidir
     // con la del propio empleado. Devuelve un mensaje de error o null.
-    private static string? ValidarCedulasFamiliares(IEnumerable<string?> cedulas, string? cedulaEmpleado)
+    internal static string? ValidarCedulasFamiliares(IEnumerable<string?> cedulas, string? cedulaEmpleado)
     {
         var informadas = cedulas
             .Where(c => !string.IsNullOrWhiteSpace(c))

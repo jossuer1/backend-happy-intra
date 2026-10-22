@@ -948,6 +948,55 @@ namespace Intranet.Migrations
                     b.ToTable("Roles");
                 });
 
+            modelBuilder.Entity("Intranet.Models.SolicitudCambioPerfil", b =>
+                {
+                    b.Property<long>("IdSolicitud")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IdSolicitud"));
+
+                    b.Property<string>("CambiosJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FechaRevision")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaSolicitud")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("IdRevisor")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("IdUsuario")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ObservacionRrhh")
+                        .HasColumnType("text");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("IdSolicitud");
+
+                    b.HasIndex("IdRevisor");
+
+                    b.HasIndex("IdUsuario")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SolicitudCambioPerfil_UnaPendientePorUsuario")
+                        .HasFilter("\"Estado\" = 'PENDIENTE'");
+
+                    b.ToTable("SolicitudesCambioPerfil");
+                });
+
             modelBuilder.Entity("Intranet.Models.SolicitudVacacion", b =>
                 {
                     b.Property<long>("IdSolicitud")
@@ -1214,6 +1263,9 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PuedeActualizarHasta")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("PuedeActualizarPerfil")
                         .HasColumnType("boolean");
 
@@ -1387,6 +1439,24 @@ namespace Intranet.Migrations
                     b.Navigation("Region");
                 });
 
+            modelBuilder.Entity("Intranet.Models.SolicitudCambioPerfil", b =>
+                {
+                    b.HasOne("Intranet.Models.Usuario", "Revisor")
+                        .WithMany()
+                        .HasForeignKey("IdRevisor")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Intranet.Models.Usuario", "Usuario")
+                        .WithMany("SolicitudesCambioPerfil")
+                        .HasForeignKey("IdUsuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Revisor");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("Intranet.Models.SolicitudVacacion", b =>
                 {
                     b.HasOne("Intranet.Models.Usuario", "JefeAprobador")
@@ -1558,6 +1628,8 @@ namespace Intranet.Migrations
                     b.Navigation("Familiares");
 
                     b.Navigation("PeriodosIess");
+
+                    b.Navigation("SolicitudesCambioPerfil");
 
                     b.Navigation("SolicitudesVacaciones");
 

@@ -1,4 +1,6 @@
 // Helpers/IEmailService/PlantillasCorreo.cs
+using System.Net;
+
 namespace Intranet.Services;
 
 public static class PlantillasCorreo
@@ -269,5 +271,65 @@ public static class PlantillasCorreo
       <p style="margin:0;">Los días ya se descontaron del saldo. Ten presente que el colaborador debe hacerte llegar los documentos firmados.</p>
       """;
     return MarcoVacaciones($"Vacaciones aprobadas: {empleado}", cuerpo);
+  }
+
+  // ---------------------------------------------------------------------
+  // Autoedición de perfil (ventana habilitada por RRHH + resolución de cambios)
+  // ---------------------------------------------------------------------
+
+  private static string BotonIntranet(string url)
+    => $"""
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:8px;">
+        <tr><td align="center">
+          <a href="{url}" style="display:inline-block; background-color:#1e5a63; color:#ffffff; text-decoration:none; font-size:15px; font-weight:600; padding:14px 32px; border-radius:8px;">
+            Ir a la Intranet
+          </a>
+        </td></tr>
+      </table>
+      """;
+
+  public static string ActualizacionPerfilHabilitada(string nombre, string fechaLimite, string urlIntranet)
+  {
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{WebUtility.HtmlEncode(nombre)}</strong>,</p>
+      <p style="margin:0 0 16px;">Recursos Humanos habilitó la actualización de tu información personal en la intranet.</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f7f8; border:1px solid #d0e3e5; border-radius:8px; margin-bottom:16px;">
+        <tr><td style="padding:16px; color:#1e5a63;">
+          Puedes actualizarla <strong>hasta el {fechaLimite}</strong>.
+        </td></tr>
+      </table>
+      <p style="margin:0 0 16px;">Podrás revisar tus datos de contacto, estado civil, familiares, contactos de emergencia y títulos. Tus cambios serán revisados por RRHH antes de aplicarse.</p>
+      {BotonIntranet(urlIntranet)}
+      """;
+    return MarcoVacaciones("Actualiza tu información 📝", cuerpo);
+  }
+
+  public static string CambiosPerfilAprobados(string nombre, string? observacion)
+  {
+    var nota = string.IsNullOrWhiteSpace(observacion)
+      ? ""
+      : $"<p style=\"margin:16px 0 0;\"><strong>Comentario de RRHH:</strong> {WebUtility.HtmlEncode(observacion)}</p>";
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{WebUtility.HtmlEncode(nombre)}</strong>,</p>
+      <p style="margin:0;">Recursos Humanos <strong>aprobó</strong> los cambios que enviaste a tu información personal. Ya están reflejados en tu perfil.</p>
+      {nota}
+      """;
+    return MarcoVacaciones("Tus cambios fueron aprobados ✅", cuerpo);
+  }
+
+  public static string CambiosPerfilRechazados(string nombre, string motivo, string fechaLimite, string urlIntranet)
+  {
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{WebUtility.HtmlEncode(nombre)}</strong>,</p>
+      <p style="margin:0 0 16px;">Recursos Humanos <strong>no aprobó</strong> los cambios que enviaste a tu información personal.</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff7ed; border:1px solid #fed7aa; border-radius:8px; margin-bottom:16px;">
+        <tr><td style="padding:16px; color:#9a3412;">
+          <strong>Motivo:</strong> {WebUtility.HtmlEncode(motivo)}
+        </td></tr>
+      </table>
+      <p style="margin:0 0 16px;">Volvimos a habilitar tu edición: puedes corregir y enviar de nuevo <strong>hasta el {fechaLimite}</strong>.</p>
+      {BotonIntranet(urlIntranet)}
+      """;
+    return MarcoVacaciones("Tus cambios no fueron aprobados", cuerpo);
   }
 }

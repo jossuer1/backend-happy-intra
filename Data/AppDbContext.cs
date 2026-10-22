@@ -23,6 +23,7 @@ public class AppDbContext : DbContext
     public DbSet<TipoSangre> TiposSangre { get; set; }
     public DbSet<Vacacion> Vacaciones { get; set; }
     public DbSet<SolicitudVacacion> SolicitudesVacaciones { get; set; }
+    public DbSet<SolicitudCambioPerfil> SolicitudesCambioPerfil { get; set; }
     public DbSet<Imagen> Imagen { get; set; }
     public DbSet<PeriodoIess> PeriodosIess { get; set; }
 
@@ -70,6 +71,36 @@ public class AppDbContext : DbContext
         .WithMany()
         .HasForeignKey(s => s.IdVacacionGenerada)
         .OnDelete(DeleteBehavior.Restrict);
+
+        // Solicitudes de cambio de perfil (autoedición con aprobación de RRHH).
+        modelBuilder.Entity<SolicitudCambioPerfil>(e =>
+        {
+            e.HasOne(s => s.Usuario)
+                .WithMany(u => u.SolicitudesCambioPerfil)
+                .HasForeignKey(s => s.IdUsuario)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(s => s.Revisor)
+                .WithMany()
+                .HasForeignKey(s => s.IdRevisor)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.Property(s => s.CambiosJson).HasColumnType("jsonb");
+
+            // xmin de PostgreSQL como token de concurrencia: si RRHH aprueba/rechaza
+            // dos veces la misma solicitud a la vez, la segunda falla en vez de aplicarse doble.
+            e.Property(s => s.Version)
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            // Solo una solicitud PENDIENTE por usuario.
+            e.HasIndex(s => s.IdUsuario)
+                .IsUnique()
+                .HasFilter("\"Estado\" = 'PENDIENTE'")
+                .HasDatabaseName("UX_SolicitudCambioPerfil_UnaPendientePorUsuario");
+        });
 
         // Catálogo de tipos de sangre (solo lectura pública; altas/bajas exclusivas de ADMIN)
         modelBuilder.Entity<TipoSangre>().HasData(

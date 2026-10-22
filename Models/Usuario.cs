@@ -47,6 +47,17 @@ public class Usuario
     // editar sus propios datos una vez; al guardar, se vuelve a desactivar sola.
     public bool PuedeActualizarPerfil { get; set; } = false;
 
+    // Fecha límite de la ventana de autoedición (UTC, fin del día en Ecuador). Pasada
+    // esta fecha la ventana se considera cerrada aunque PuedeActualizarPerfil siga en
+    // true. Null = sin plazo.
+    public DateTime? PuedeActualizarHasta { get; set; }
+
+    // Ventana realmente abierta ahora mismo (solo para uso en memoria; en consultas
+    // LINQ a la base hay que repetir la condición, EF no traduce propiedades NotMapped).
+    [NotMapped]
+    public bool VentanaEdicionAbierta
+        => PuedeActualizarPerfil && (PuedeActualizarHasta == null || PuedeActualizarHasta > DateTime.UtcNow);
+
     public string? UrlImagenPerfil { get; set; }
 
     // Valores permitidos en Models/OpcionesFijas.cs (Nacionalidades). Por defecto ECUATORIANA.
@@ -123,4 +134,5 @@ public class Usuario
     public virtual ICollection<Vacacion> VacacionesRecibidas { get; set; } = new List<Vacacion>();
     public virtual ICollection<Vacacion> VacacionesRegistradas { get; set; } = new List<Vacacion>();
     public virtual ICollection<SolicitudVacacion> SolicitudesVacaciones { get; set; } = new List<SolicitudVacacion>();
+    public virtual ICollection<SolicitudCambioPerfil> SolicitudesCambioPerfil { get; set; } = new List<SolicitudCambioPerfil>();
 }

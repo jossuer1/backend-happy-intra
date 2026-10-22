@@ -69,7 +69,15 @@ public class PerfilDto
     public bool TieneVacaciones { get; set; }
     public int DiasVacacionesAsignados { get; set; }
     public bool Estado { get; set; }
+
+    // true solo si RRHH habilitó la edición Y el plazo no ha vencido.
     public bool PuedeActualizarPerfil { get; set; }
+
+    // Fecha límite de la ventana (UTC, fin del día en Ecuador); null si no hay ventana o es sin plazo.
+    public DateTime? PuedeActualizarHasta { get; set; }
+
+    // true mientras RRHH no resuelva los cambios que el empleado ya envió.
+    public bool TieneSolicitudPendiente { get; set; }
 
     // --- Condición laboral ---
     public string? CargoIess { get; set; }

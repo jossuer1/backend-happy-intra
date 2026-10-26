@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Intranet.DTOs;
 using Intranet.Services;
+using Intranet.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Intranet.Controllers;
 
@@ -13,10 +15,12 @@ namespace Intranet.Controllers;
 public class VacacionesController : ControllerBase
 {
     private readonly IVacacionService _vacacionService;
+    private readonly AppDbContext _context;
 
-    public VacacionesController(IVacacionService vacacionService)
+    public VacacionesController(IVacacionService vacacionService, AppDbContext context)
     {
         _vacacionService = vacacionService;
+        _context = context;
     }
 
     // 1. Obtener el saldo propio o el de cualquier usuario si es RRHH
@@ -26,7 +30,7 @@ public class VacacionesController : ControllerBase
         var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var esRrhh = User.IsInRole("RRHH");
 
-        if (!esRrhh && currentUserId != idUsuario)
+        if (!esRrhh && currentUserId != idUsuario && !await EsEmpleadoPropioAsync(currentUserId, idUsuario))
             return Forbid(); // Un empleado normal no puede ver el saldo de otros
 
         var resultado = await _vacacionService.ObtenerSaldoAsync(idUsuario);
@@ -43,12 +47,17 @@ public class VacacionesController : ControllerBase
         var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var esRrhh = User.IsInRole("RRHH");
 
-        if (!esRrhh && currentUserId != idUsuario)
+        if (!esRrhh && currentUserId != idUsuario && !await EsEmpleadoPropioAsync(currentUserId, idUsuario))
             return Forbid();
 
         var resultado = await _vacacionService.ObtenerHistorialAsync(idUsuario);
         return Ok(resultado.Data);
     }
+
+    private Task<bool> EsEmpleadoPropioAsync(long idJefe, long idEmpleado)
+        => _context.Usuarios.AnyAsync(u => u.IdUsuario == idEmpleado &&
+            u.IdJefeDirecto == idJefe && u.JefeDirecto != null &&
+            u.JefeDirecto.Estado && u.JefeDirecto.EsJefe);
 
     // 3. Endpoint conveniente para que el empleado logueado vea su propio historial directamente
     [HttpGet("mis-vacaciones")]

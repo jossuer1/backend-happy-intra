@@ -128,6 +128,8 @@ public class CrearUsuarioDto
     public string CorreoPersonal { get; set; } = null!;
 
     // Claves foráneas (sin IdRol)
+    [Required(ErrorMessage = "Selecciona un cargo.")]
+    [Range(1, long.MaxValue)]
     public long? IdCargo { get; set; }
     public long? IdCiudad { get; set; }
     public long? IdEstadoCivil { get; set; }
@@ -155,6 +157,7 @@ public class CrearUsuarioDto
     public string? UrlImagenPerfil { get; set; }
 
     public DateTime? FechaNacimiento { get; set; }
+    [FechaInformada]
     public DateTime? FechaIngreso { get; set; }
 
     public bool TieneVacaciones { get; set; } = true;

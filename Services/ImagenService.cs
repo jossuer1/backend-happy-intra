@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
+using Intranet.Helpers;
 
 namespace Intranet.Services;
 
@@ -18,6 +19,8 @@ public class ImagenService : IImagenService
 
     public async Task<ServiceResult<ImagenDto>> AgregarAsync(ImagenCrearDto dto)
     {
+        var errorImagen = await ValidacionImagen.ValidarAsync(dto.Archivo);
+        if (errorImagen != null) return ServiceResult<ImagenDto>.Fallo(errorImagen);
         if (dto.Archivo == null || dto.Archivo.Length == 0)
             return ServiceResult<ImagenDto>.Fallo("Debe adjuntar una imagen.");
 

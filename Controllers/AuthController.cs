@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Intranet.DTOs;
 using Intranet.Services;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Intranet.Controllers;
 
@@ -16,6 +17,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var resultado = await _authService.LoginAsync(dto);
@@ -27,6 +29,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("cambiar-contrasena")]
+    [EnableRateLimiting("cambio-clave")]
     public async Task<IActionResult> CambiarContrasena([FromBody] CambiarContrasenaDto dto)
     {
         var resultado = await _authService.CambiarContrasenaAsync(dto);
@@ -38,6 +41,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("recuperar-contrasena")]
+    [EnableRateLimiting("recuperacion")]
     public async Task<IActionResult> RecuperarContrasena([FromBody] RecuperarContrasenaDto dto)
     {
         var resultado = await _authService.SolicitarRecuperacionAsync(dto);

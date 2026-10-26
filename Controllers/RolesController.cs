@@ -4,6 +4,7 @@ using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
 using Intranet.Helpers;
+using Intranet.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 
@@ -84,12 +85,16 @@ public class RolesController : ControllerBase
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> ActualizarRol(long id, [FromBody] RolActualizarDto dto)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var rol = await _context.Roles.FindAsync(id);
         if (rol == null)
             return NotFound(new { mensaje = "Rol no encontrado." });
 
         var nombre = TextoHelper.AMayusculasObligatorio(dto.Nombre);
 
+        if (rol.Nombre is "ADMIN" or "RRHH" && (nombre != rol.Nombre || !dto.Estado))
+            return BadRequest(new { mensaje = "Los roles ADMIN y RRHH son roles del sistema: no se pueden renombrar ni desactivar." });
         if (await _context.Roles.AnyAsync(r => r.Nombre == nombre && r.IdRol != id))
             return BadRequest(new { mensaje = "Ya existe otro rol con ese nombre." });
 
@@ -97,6 +102,9 @@ public class RolesController : ControllerBase
         rol.Estado = dto.Estado;
 
         await _context.SaveChangesAsync();
+        await _context.Usuarios.Where(u => u.IdRol == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.VersionAcceso, u => u.VersionAcceso + 1));
+        await tx.CommitAsync();
         return Ok(rol);
     }
 
@@ -105,12 +113,19 @@ public class RolesController : ControllerBase
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> EliminarRol(long id)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var rol = await _context.Roles.FindAsync(id);
         if (rol == null)
             return NotFound(new { mensaje = "Rol no encontrado." });
 
+        if (rol.Nombre is "ADMIN" or "RRHH")
+            return BadRequest(new { mensaje = "Los roles ADMIN y RRHH son roles del sistema y no se pueden desactivar." });
         rol.Estado = false;
         await _context.SaveChangesAsync();
+        await _context.Usuarios.Where(u => u.IdRol == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.VersionAcceso, u => u.VersionAcceso + 1));
+        await tx.CommitAsync();
 
         return Ok(new { mensaje = "Rol desactivado correctamente." });
     }
@@ -120,6 +135,8 @@ public class RolesController : ControllerBase
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> AsignarRolAUsuario([FromBody] AsignarRolUsuarioDto dto)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);
         if (usuario == null)
             return NotFound(new { mensaje = "El usuario indicado no existe." });
@@ -132,11 +149,18 @@ public class RolesController : ControllerBase
         if (usuario.IdUsuario == IdUsuarioActual())
             return BadRequest(new { mensaje = "No puedes cambiar tu propio rol." });
 
+        if (usuario.Estado && usuario.IdRol != dto.IdRol)
+        {
+            var error = await SeguridadCuentas.ValidarRetiroAsync(_context, usuario.IdUsuario, usuario.IdRol);
+            if (error != null) return BadRequest(new { mensaje = error });
+        }
         usuario.IdRol = dto.IdRol;
+        usuario.VersionAcceso++;
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
-        return Ok(new { mensaje = $"Rol asignado correctamente al usuario {usuario.Nombre} {usuario.Apellido}. El cambio se aplica cuando vuelva a iniciar sesión." });
+        return Ok(new { mensaje = $"Rol asignado correctamente al usuario {usuario.Nombre} {usuario.Apellido}. Sus sesiones anteriores fueron revocadas; debe iniciar sesión nuevamente." });
     }
 
     // POST: api/Roles/quitar-usuario/5  (deja al usuario sin rol)
@@ -144,6 +168,8 @@ public class RolesController : ControllerBase
     [Authorize(Roles = "ADMIN")]
     public async Task<IActionResult> QuitarRolAUsuario(long idUsuario)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var usuario = await _context.Usuarios.FindAsync(idUsuario);
         if (usuario == null)
             return NotFound(new { mensaje = "El usuario indicado no existe." });
@@ -151,9 +177,16 @@ public class RolesController : ControllerBase
         if (usuario.IdUsuario == IdUsuarioActual())
             return BadRequest(new { mensaje = "No puedes quitarte tu propio rol." });
 
+        if (usuario.Estado)
+        {
+            var error = await SeguridadCuentas.ValidarRetiroAsync(_context, usuario.IdUsuario, usuario.IdRol);
+            if (error != null) return BadRequest(new { mensaje = error });
+        }
         usuario.IdRol = null;
+        usuario.VersionAcceso++;
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return Ok(new { mensaje = $"Se quitó el rol al usuario {usuario.Nombre} {usuario.Apellido}." });
     }

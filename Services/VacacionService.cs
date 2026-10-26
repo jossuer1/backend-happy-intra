@@ -95,6 +95,10 @@ public class VacacionService : IVacacionService
 
     public async Task<ServiceResult<VacacionDto>> RegistrarDescuentoAsync(VacacionDescuentoCrearDto dto, long idRegistradoPor)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await BloquearTraspasoEquipoAsync();
+        if (!ValidacionesExpediente.FechaInformada(dto.FechaInicio) || !ValidacionesExpediente.FechaInformada(dto.FechaFin))
+            return ServiceResult<VacacionDto>.Fallo("Las fechas de inicio y fin son obligatorias y deben ser válidas.");
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);
         if (usuario == null)
             return ServiceResult<VacacionDto>.Fallo("Usuario no encontrado.");
@@ -110,6 +114,13 @@ public class VacacionService : IVacacionService
 
         // Días calendario, inclusivo (ej. lunes a viernes de la misma semana = 5 días)
         int diasSolicitados = (fin - inicio).Days + 1;
+
+        if (await _context.Vacaciones.AnyAsync(v => v.IdUsuario == dto.IdUsuario && v.Estado &&
+            v.TipoMovimiento == "Descuento" && v.FechaInicio <= fin && v.FechaFin >= inicio) ||
+            await _context.SolicitudesVacaciones.AnyAsync(s => s.IdUsuario == dto.IdUsuario &&
+            s.Estado != EstadoSolicitudVacacion.RechazadaJefe && s.Estado != EstadoSolicitudVacacion.Anulada &&
+            s.FechaInicio <= fin && s.FechaFin >= inicio))
+            return ServiceResult<VacacionDto>.Fallo("El rango coincide con vacaciones o solicitudes vigentes del empleado.");
 
         var saldoResult = await ObtenerSaldoAsync(dto.IdUsuario);
         if (!saldoResult.Exito)
@@ -133,12 +144,15 @@ public class VacacionService : IVacacionService
         };
         _context.Vacaciones.Add(vacacion);
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return ServiceResult<VacacionDto>.Ok(await MapearDtoAsync(vacacion.IdVacacion));
     }
 
     public async Task<ServiceResult<VacacionDto>> RegistrarAjusteAsync(VacacionAjusteCrearDto dto, long idRegistradoPor)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await BloquearTraspasoEquipoAsync();
         var usuario = await _context.Usuarios.FindAsync(dto.IdUsuario);
         if (usuario == null)
             return ServiceResult<VacacionDto>.Fallo("Usuario no encontrado.");
@@ -146,7 +160,7 @@ public class VacacionService : IVacacionService
         if (!usuario.TieneVacaciones)
             return ServiceResult<VacacionDto>.Fallo("Este usuario no tiene el beneficio de vacaciones habilitado.");
 
-        if (dto.Dias <= 0)
+        if (dto.Dias <= 0 || dto.Dias > 365)
             return ServiceResult<VacacionDto>.Fallo("El número de días a corregir debe ser mayor a cero.");
 
         if (string.IsNullOrWhiteSpace(dto.Motivo))
@@ -166,6 +180,7 @@ public class VacacionService : IVacacionService
 
         _context.Vacaciones.Add(vacacion);
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return ServiceResult<VacacionDto>.Ok(await MapearDtoAsync(vacacion.IdVacacion));
     }
@@ -242,6 +257,8 @@ public class VacacionService : IVacacionService
     // ObtenerSaldoAsync solo suma movimientos con Estado = true.
     public async Task<ServiceResult<bool>> AnularAsync(long idVacacion, long idAnuladoPor)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await BloquearTraspasoEquipoAsync();
         var vacacion = await _context.Vacaciones.FindAsync(idVacacion);
         if (vacacion == null)
             return ServiceResult<bool>.Fallo("El movimiento de vacaciones no existe.");
@@ -251,6 +268,12 @@ public class VacacionService : IVacacionService
 
         var anuladoPor = await _context.Usuarios.FindAsync(idAnuladoPor);
 
+        if (vacacion.TipoMovimiento == "Ajuste")
+        {
+            var saldo = await ObtenerSaldoAsync(vacacion.IdUsuario);
+            if (!saldo.Exito || saldo.Data!.DiasDisponibles < vacacion.DiasTomados)
+                return ServiceResult<bool>.Fallo("No se puede anular el ajuste porque dejaría un saldo negativo.");
+        }
         vacacion.Estado = false;
         vacacion.Observacion = string.IsNullOrWhiteSpace(vacacion.Observacion)
             ? $"[Anulado por {anuladoPor?.Nombre} {anuladoPor?.Apellido} el {DateTime.UtcNow:dd/MM/yyyy}]"
@@ -265,6 +288,7 @@ public class VacacionService : IVacacionService
 
         await _context.SaveChangesAsync();
 
+        await tx.CommitAsync();
         return ServiceResult<bool>.Ok(true);
     }
 
@@ -293,6 +317,10 @@ public class VacacionService : IVacacionService
 
     public async Task<ServiceResult<SolicitudVacacionDto>> CrearSolicitudAsync(long idUsuario, SolicitudVacacionCrearDto dto)
     {
+        if (!ValidacionesExpediente.FechaInformada(dto.FechaInicio) || !ValidacionesExpediente.FechaInformada(dto.FechaFin))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Las fechas de inicio y fin son obligatorias y deben ser válidas.");
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await BloquearTraspasoEquipoAsync();
         var usuario = await _context.Usuarios.FindAsync(idUsuario);
         if (usuario == null)
             return ServiceResult<SolicitudVacacionDto>.Fallo("Usuario no encontrado.");
@@ -303,6 +331,8 @@ public class VacacionService : IVacacionService
         if (usuario.IdJefeDirecto == null)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
                 "No tienes un jefe directo asignado. Pide a RRHH que lo configure antes de solicitar vacaciones.");
+        if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == usuario.IdJefeDirecto && u.Estado && u.EsJefe && u.IdUsuario != idUsuario))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Tu jefe directo debe estar activo y habilitado para aprobar vacaciones.");
 
         if (dto.FechaFin.Date < dto.FechaInicio.Date)
             return ServiceResult<SolicitudVacacionDto>.Fallo("La fecha de fin no puede ser anterior a la fecha de inicio.");
@@ -339,6 +369,9 @@ public class VacacionService : IVacacionService
         if (yaExisteEnRango)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
                 "Ya tienes una solicitud en trámite o aprobada que se cruza con ese rango de fechas.");
+        if (await _context.Vacaciones.AnyAsync(v => v.IdUsuario == idUsuario && v.Estado &&
+            v.TipoMovimiento == "Descuento" && v.FechaInicio <= fin && v.FechaFin >= inicio))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Ya tienes vacaciones registradas en ese rango de fechas.");
 
         var solicitud = new SolicitudVacacion
         {
@@ -354,6 +387,8 @@ public class VacacionService : IVacacionService
 
         _context.SolicitudesVacaciones.Add(solicitud);
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
+        await EnviarAvisoSolicitudAsync(solicitud.IdSolicitud, nueva: true);
 
         return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
     }
@@ -386,12 +421,20 @@ public class VacacionService : IVacacionService
     // disponibles para descargar desde la intranet.
     public async Task<ServiceResult<SolicitudVacacionDto>> ResponderComoJefeAsync(long idSolicitud, long idJefe, RespuestaSolicitudVacacionDto dto)
     {
+        if (!dto.Aprobar.HasValue)
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Indica explícitamente si apruebas o rechazas la solicitud.");
+        if (dto.Aprobar == false && string.IsNullOrWhiteSpace(dto.Observacion))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("El motivo del rechazo es obligatorio.");
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await BloquearTraspasoEquipoAsync();
         var solicitud = await _context.SolicitudesVacaciones.FindAsync(idSolicitud);
         if (solicitud == null)
             return ServiceResult<SolicitudVacacionDto>.Fallo("La solicitud no existe.");
 
         if (solicitud.IdJefeAprobador != idJefe)
             return ServiceResult<SolicitudVacacionDto>.Fallo("No tienes permiso para responder esta solicitud.");
+        if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == idJefe && u.Estado && u.EsJefe))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("Tu cuenta debe estar activa y habilitada como jefe.");
 
         if (solicitud.Estado != EstadoSolicitudVacacion.PendienteJefe)
             return ServiceResult<SolicitudVacacionDto>.Fallo("Esta solicitud ya fue respondida y no puede modificarse.");
@@ -399,10 +442,12 @@ public class VacacionService : IVacacionService
         solicitud.FechaRespuestaJefe = DateTime.UtcNow;
         solicitud.ObservacionJefe = dto.Observacion;
 
-        if (!dto.Aprobar)
+        if (dto.Aprobar == false)
         {
             solicitud.Estado = EstadoSolicitudVacacion.RechazadaJefe;
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
+            await EnviarAvisoSolicitudAsync(solicitud.IdSolicitud, nueva: false);
             return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
         }
 
@@ -415,6 +460,9 @@ public class VacacionService : IVacacionService
         if (solicitud.DiasSolicitados > saldoResult.Data!.DiasDisponibles)
             return ServiceResult<SolicitudVacacionDto>.Fallo(
                 $"El empleado ya no tiene saldo suficiente. Disponibles: {saldoResult.Data.DiasDisponibles}, solicitados: {solicitud.DiasSolicitados}.");
+        if (await _context.Vacaciones.AnyAsync(v => v.IdUsuario == solicitud.IdUsuario && v.Estado &&
+            v.TipoMovimiento == "Descuento" && v.FechaInicio <= solicitud.FechaFin && v.FechaFin >= solicitud.FechaInicio))
+            return ServiceResult<SolicitudVacacionDto>.Fallo("El rango de la solicitud ya tiene vacaciones registradas.");
 
         // Un solo SaveChanges: el descuento y la aprobación se guardan juntos o no se guarda nada.
         solicitud.VacacionGenerada = new Vacacion
@@ -431,11 +479,18 @@ public class VacacionService : IVacacionService
         solicitud.Estado = EstadoSolicitudVacacion.Aprobada;
 
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         await EnviarCorreosAprobacionAsync(solicitud.IdSolicitud);
 
         return ServiceResult<SolicitudVacacionDto>.Ok(await MapearSolicitudDtoAsync(solicitud.IdSolicitud));
     }
+
+    // Mismo orden de bloqueo que el traspaso: una solicitud no puede nacer con
+    // el jefe anterior ni ser resuelta por él mientras se está trasladando.
+    private Task BloquearTraspasoEquipoAsync()
+        => _context.Database.ExecuteSqlRawAsync(
+            "LOCK TABLE \"Usuarios\", \"SolicitudesVacaciones\" IN SHARE ROW EXCLUSIVE MODE");
 
     // Arma los 3 PDFs de una solicitud aprobada. Se generan al vuelo en cada llamada;
     // no se guardan en disco ni en base de datos.
@@ -555,6 +610,39 @@ public class VacacionService : IVacacionService
 
     // Correo al empleado (con los 3 PDFs adjuntos) y aviso a RRHH (sin adjuntos).
     // Todo va dentro de try/catch: un fallo de correo nunca debe deshacer la aprobación.
+    private async Task EnviarAvisoSolicitudAsync(long idSolicitud, bool nueva)
+    {
+        try
+        {
+            var solicitud = await ConsultaSolicitudesConIncludes().AsNoTracking()
+                .FirstAsync(s => s.IdSolicitud == idSolicitud);
+            var destinatario = nueva ? solicitud.JefeAprobador : solicitud.Usuario;
+            if (destinatario == null)
+            {
+                _logger.LogWarning("Solicitud {Id}: no existe destinatario para el aviso de vacaciones.", idSolicitud);
+                return;
+            }
+            var correo = string.IsNullOrWhiteSpace(destinatario.CorreoEmpresa)
+                ? destinatario.CorreoPersonal : destinatario.CorreoEmpresa;
+            var url = (_config["Intranet:UrlBase"] ?? "https://intranet-happy.onrender.com").TrimEnd('/')
+                + (nueva ? "/aprobar-vacaciones" : "/mis-vacaciones");
+            var html = PlantillasCorreo.AvisoSolicitudVacaciones(
+                destinatario.Nombre, $"{solicitud.Usuario.Nombre} {solicitud.Usuario.Apellido}",
+                solicitud.IdSolicitud, solicitud.FechaInicio, solicitud.FechaFin,
+                solicitud.DiasSolicitados, nueva ? solicitud.Motivo : solicitud.ObservacionJefe, url, nueva);
+            var enviado = await _emailService.SendEmailAsync(correo,
+                $"{destinatario.Nombre} {destinatario.Apellido}",
+                nueva ? "Nueva solicitud de vacaciones de tu equipo" : "Tu solicitud de vacaciones fue rechazada", html);
+            if (!enviado)
+                _logger.LogWarning("No se pudo enviar el aviso de vacaciones (solicitud {Id}, nueva: {Nueva}).", idSolicitud, nueva);
+        }
+        catch (Exception ex)
+        {
+            // La solicitud ya quedó confirmada. Un fallo de correo no debe repetir la operación.
+            _logger.LogError(ex, "Error enviando aviso de vacaciones (solicitud {Id}, nueva: {Nueva}).", idSolicitud, nueva);
+        }
+    }
+
     private async Task EnviarCorreosAprobacionAsync(long idSolicitud)
     {
         try

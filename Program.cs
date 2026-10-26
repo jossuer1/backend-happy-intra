@@ -5,6 +5,10 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
+using System.Security.Claims;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
+using Npgsql;
 
 QuestPDF.Settings.License = LicenseType.Community;
 
@@ -13,6 +17,27 @@ builder.Services.AddHealthChecks();
 // Registrar servicios
 builder.Services.AddHttpClient<IEmailService, BrevoEmailService>();
 builder.Services.AddControllers();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var espera))
+            context.HttpContext.Response.Headers.RetryAfter = Math.Ceiling(espera.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await context.HttpContext.Response.WriteAsJsonAsync(new { mensaje = "Demasiados intentos. Espera unos minutos antes de volver a intentar." }, token);
+    };
+    void AgregarLimite(string nombre, int intentos, TimeSpan ventana)
+        => options.AddPolicy(nombre, context => RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "sin-ip",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = intentos, Window = ventana, QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    AgregarLimite("login", 10, TimeSpan.FromMinutes(1));
+    AgregarLimite("cambio-clave", 5, TimeSpan.FromMinutes(5));
+    AgregarLimite("recuperacion", 3, TimeSpan.FromMinutes(15));
+});
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 
@@ -65,6 +90,22 @@ builder.Services.AddAuthentication(options =>
 {
     options.RequireHttpsMetadata = true; // Cambiar a true en producción si usas HTTPS estricto
     options.SaveToken = true;
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            if (!long.TryParse(context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+            {
+                context.Fail("Identidad inválida.");
+                return;
+            }
+            var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var usuario = await db.Usuarios.AsNoTracking().Include(u => u.Rol)
+                .FirstOrDefaultAsync(u => u.IdUsuario == id, context.HttpContext.RequestAborted);
+            if (!AccesoToken.EsVigente(context.Principal!, usuario))
+                context.Fail("La cuenta o sus permisos cambiaron. Inicia sesión nuevamente.");
+        }
+    };
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
@@ -91,6 +132,21 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("FrontendLocal");
+app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    try { await next(); }
+    catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { mensaje = "Ya existe un registro con esa cédula, correo u otro dato único. Actualiza la información e inténtalo nuevamente." });
+    }
+    catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation })
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { mensaje = "Un registro relacionado cambió o ya no existe. Actualiza la página y revisa los datos seleccionados." });
+    }
+});
 app.UseAuthentication();
 app.UseAuthorization();
 

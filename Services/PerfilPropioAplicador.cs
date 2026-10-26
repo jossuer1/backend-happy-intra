@@ -97,7 +97,7 @@ public class PerfilPropioAplicador
 
         if (dto.IdEstadoCivil.HasValue)
         {
-            if (!await _context.EstadosCiviles.AnyAsync(e => e.IdEstadoCivil == dto.IdEstadoCivil.Value))
+            if (!await _context.EstadosCiviles.AnyAsync(e => e.IdEstadoCivil == dto.IdEstadoCivil.Value && e.Estado))
                 return "El estado civil seleccionado no existe.";
 
             usuario.IdEstadoCivil = dto.IdEstadoCivil.Value;
@@ -239,6 +239,6 @@ public class PerfilPropioAplicador
             }
         }
 
-        return null;
+        return ValidacionesExpediente.Validar(usuario, expedienteCompleto: false);
     }
 }

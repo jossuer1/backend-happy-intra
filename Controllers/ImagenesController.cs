@@ -35,6 +35,7 @@ public class ImagenesController : ControllerBase
     }
     // 3. Exclusivo RRHH: Guardar la nueva imagen subida desde el frontend
     [HttpPost]
+    [RequestSizeLimit(6 * 1024 * 1024)]
     [Authorize(Roles = "RRHH")]
     public async Task<IActionResult> Agregar([FromForm] ImagenCrearDto dto) 
     {

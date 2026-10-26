@@ -11,9 +11,11 @@ public class VacacionDescuentoCrearDto
     public long IdUsuario { get; set; }
 
     [Required(ErrorMessage = "La fecha de inicio es obligatoria.")]
+    [FechaInformada]
     public DateTime FechaInicio { get; set; }
 
     [Required(ErrorMessage = "La fecha de fin es obligatoria.")]
+    [FechaInformada]
     public DateTime FechaFin { get; set; }
 
     [Required(ErrorMessage = "El motivo es obligatorio.")]
@@ -30,7 +32,7 @@ public class VacacionAjusteCrearDto
     public long IdUsuario { get; set; }
 
     [Required(ErrorMessage = "Los días son obligatorios.")]
-    [Range(-365, 365, ErrorMessage = "Los días deben estar entre -365 y 365.")]
+    [Range(1, 365, ErrorMessage = "Los días a acreditar deben estar entre 1 y 365.")]
     public int Dias { get; set; }
 
     [Required(ErrorMessage = "El motivo es obligatorio.")]
@@ -84,6 +86,7 @@ public class ResumenVacacionesDto
 // y opcionalmente ajustar los días asignados.
 public class ActualizarVacacionesUsuarioDto
 {
+    [System.Text.Json.Serialization.JsonRequired]
     public bool TieneVacaciones { get; set; }
 
     [Range(0, 365, ErrorMessage = "Los días asignados deben estar entre 0 y 365.")]

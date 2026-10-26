@@ -7,6 +7,7 @@ using Intranet.Data;
 using Intranet.DTOs;
 using Intranet.Models;
 using Intranet.Services;
+using Intranet.Helpers;
 
 namespace Intranet.Controllers;
 
@@ -34,6 +35,74 @@ public class UsuariosController : ControllerBase
         _usuarioService = usuarioService;
         _solicitudPerfilService = solicitudPerfilService;
         _imagenPerfilService = imagenPerfilService;
+    }
+
+    // Lista para los selectores de reemplazo. Incluye jefes inactivos como origen;
+    // el destino siempre se valida como activo en el servicio.
+    [HttpGet("jefes")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerJefes()
+    {
+        return Ok(await _context.Usuarios.AsNoTracking()
+            .Where(u => u.EsJefe)
+            .OrderBy(u => u.Apellido).ThenBy(u => u.Nombre)
+            .Select(u => new
+            {
+                u.IdUsuario, u.Nombre, u.Apellido, u.Estado,
+                Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                Area = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null,
+                CantidadEmpleados = u.Subordinados.Count(),
+                CantidadSolicitudesPendientes = _context.SolicitudesVacaciones.Count(s =>
+                    s.Usuario.IdJefeDirecto == u.IdUsuario &&
+                    s.Estado == EstadoSolicitudVacacion.PendienteJefe)
+            }).ToListAsync());
+    }
+
+    [HttpGet("jefes/{idJefe:long}/empleados")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> ObtenerEmpleadosDeJefe(long idJefe)
+    {
+        if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == idJefe && u.EsJefe))
+            return NotFound(new { mensaje = "Jefe no encontrado." });
+        return Ok(await _context.Usuarios.AsNoTracking()
+            .Where(u => u.IdJefeDirecto == idJefe)
+            .OrderBy(u => u.Apellido).ThenBy(u => u.Nombre)
+            .Select(u => new
+            {
+                u.IdUsuario, u.Nombre, u.Apellido, u.Estado, u.TieneVacaciones,
+                Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                Area = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null
+            }).ToListAsync());
+    }
+
+    [HttpPost("traspasar-equipo")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> TraspasarEquipo([FromBody] TraspasarEquipoDto dto)
+    {
+        var resultado = await _usuarioService.TraspasarEquipoAsync(dto);
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+        return Ok(resultado.Data);
+    }
+
+    [HttpGet("mis-empleados")]
+    public async Task<IActionResult> ObtenerMisEmpleados()
+    {
+        if (!long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var idJefe))
+            return Forbid();
+        if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == idJefe && u.Estado && u.EsJefe))
+            return Forbid();
+
+        // El jefe viene exclusivamente del token. No se exponen datos del perfil personal.
+        return Ok(await _context.Usuarios.AsNoTracking()
+            .Where(u => u.IdJefeDirecto == idJefe)
+            .OrderBy(u => u.Apellido).ThenBy(u => u.Nombre)
+            .Select(u => new
+            {
+                u.IdUsuario, u.Nombre, u.Apellido, u.Estado, u.TieneVacaciones,
+                Cargo = u.Cargo != null ? u.Cargo.Nombre : null,
+                Area = u.Cargo != null && u.Cargo.Area != null ? u.Cargo.Area.Nombre : null
+            }).ToListAsync());
     }
 
     // Solo RRHH puede registrar nuevos colaboradores
@@ -269,10 +338,13 @@ public class UsuariosController : ControllerBase
     [Authorize(Roles = "RRHH")]
     public async Task<IActionResult> ActualizarEstado(long id, [FromBody] ActualizarEstadoUsuarioDto dto)
     {
-        var resultado = await _usuarioService.ActualizarEstadoAsync(id, dto.Activar);
+        if (!long.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var idActor)) return Forbid();
+        var resultado = await _usuarioService.ActualizarEstadoAsync(id, dto.Activar, idActor);
 
         if (!resultado.Exito)
-            return NotFound(new { mensaje = resultado.Mensaje });
+            return resultado.Mensaje == "Usuario no encontrado."
+                ? NotFound(new { mensaje = resultado.Mensaje })
+                : BadRequest(new { mensaje = resultado.Mensaje });
 
         return Ok(new
         {
@@ -383,7 +455,7 @@ public class UsuariosController : ControllerBase
     // Mismo criterio de acceso que GetUsuarioPorId: el propio usuario puede
     // actualizar su foto, o RRHH puede actualizar la de cualquiera.
     [HttpPost("{id}/foto")]
-    [RequestSizeLimit(TamanoMaximoImagenBytes)]
+    [RequestSizeLimit(6 * 1024 * 1024)]
     public async Task<IActionResult> ActualizarFotoPerfil(long id, [FromForm] IFormFile foto)
     {
         var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -392,6 +464,8 @@ public class UsuariosController : ControllerBase
         if (!esRrhh && currentUserId != id)
             return Forbid();
 
+        var errorImagen = await ValidacionImagen.ValidarAsync(foto);
+        if (errorImagen != null) return BadRequest(new { mensaje = errorImagen });
         if (foto == null || foto.Length == 0)
             return BadRequest(new { mensaje = "No se recibió ningún archivo." });
 

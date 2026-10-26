@@ -30,6 +30,11 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<Usuario>().HasIndex(u => u.Cedula).IsUnique();
+        modelBuilder.Entity<Usuario>().HasIndex(u => u.CorreoEmpresa).IsUnique()
+            .HasFilter("\"CorreoEmpresa\" <> ''");
+        modelBuilder.Entity<Usuario>().HasIndex(u => u.CorreoPersonal).IsUnique()
+            .HasFilter("\"CorreoPersonal\" <> ''");
 
         modelBuilder.Entity<Vacacion>()
         .HasOne(v => v.Usuario)

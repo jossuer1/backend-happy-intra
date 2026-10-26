@@ -13,7 +13,7 @@ public class PasswordSeguraAttribute : ValidationAttribute
     private static readonly Regex Mayuscula = new(@"[A-ZÁÉÍÓÚÑ]", RegexOptions.Compiled);
     private static readonly Regex Minuscula = new(@"[a-záéíóúñ]", RegexOptions.Compiled);
     private static readonly Regex Numero = new(@"[0-9]", RegexOptions.Compiled);
-    private static readonly Regex Especial = new(@"[^A-Za-z0-9]", RegexOptions.Compiled);
+    private static readonly Regex Especial = new(@"[^\p{L}\p{N}\s]", RegexOptions.Compiled);
 
     public int LongitudMinima { get; set; } = 8;
 
@@ -26,6 +26,8 @@ public class PasswordSeguraAttribute : ValidationAttribute
 
         if (contrasena.Length < LongitudMinima)
             return new ValidationResult($"La contraseña debe tener al menos {LongitudMinima} caracteres.");
+        if (System.Text.Encoding.UTF8.GetByteCount(contrasena) > 72)
+            return new ValidationResult("La contraseña no puede superar los 72 bytes en UTF-8.");
 
         if (!Mayuscula.IsMatch(contrasena))
             return new ValidationResult("La contraseña debe incluir al menos una letra mayúscula.");

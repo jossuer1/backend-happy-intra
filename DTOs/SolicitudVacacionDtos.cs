@@ -9,9 +9,11 @@ namespace Intranet.DTOs;
 public class SolicitudVacacionCrearDto
 {
     [Required(ErrorMessage = "La fecha de inicio es obligatoria.")]
+    [FechaInformada]
     public DateTime FechaInicio { get; set; }
 
     [Required(ErrorMessage = "La fecha de fin es obligatoria.")]
+    [FechaInformada]
     public DateTime FechaFin { get; set; }
 
     [Required(ErrorMessage = "El motivo es obligatorio.")]
@@ -24,7 +26,7 @@ public class SolicitudVacacionCrearDto
 public class RespuestaSolicitudVacacionDto
 {
     [Required(ErrorMessage = "Debes indicar si apruebas o rechazas la solicitud.")]
-    public bool Aprobar { get; set; }
+    public bool? Aprobar { get; set; }
 
     [StringLength(200, ErrorMessage = "La observación no puede superar los 200 caracteres.")]
     public string? Observacion { get; set; }

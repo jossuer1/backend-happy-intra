@@ -83,9 +83,12 @@ public class AuthService : IAuthService
 
         if (!BCrypt.Net.BCrypt.Verify(dto.ContrasenaActual, usuario.ContrasenaHash))
             return ServiceResult<string>.Fallo("La contraseña actual es incorrecta.");
+        if (BCrypt.Net.BCrypt.Verify(dto.NuevaContrasena, usuario.ContrasenaHash))
+            return ServiceResult<string>.Fallo("La nueva contraseña debe ser diferente a la actual.");
 
         usuario.ContrasenaHash = BCrypt.Net.BCrypt.HashPassword(dto.NuevaContrasena);
         usuario.DebeCambiarContrasena = false;
+        usuario.VersionAcceso++;
         usuario.FechaActualizacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -111,6 +114,7 @@ public class AuthService : IAuthService
         string claveTemporal = GenerarContrasenaAleatoria(10);
         usuario.ContrasenaHash = BCrypt.Net.BCrypt.HashPassword(claveTemporal);
         usuario.DebeCambiarContrasena = true;
+        usuario.VersionAcceso++;
         usuario.FechaActualizacion = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -147,6 +151,7 @@ public class AuthService : IAuthService
 
         var claims = new List<Claim>
         {
+            new("version_acceso", usuario.VersionAcceso.ToString()),
             new(ClaimTypes.NameIdentifier, usuario.IdUsuario.ToString()),
             new(ClaimTypes.Name, $"{usuario.Nombre} {usuario.Apellido}"),
             new(ClaimTypes.Email, usuario.CorreoEmpresa)

@@ -4,6 +4,7 @@ namespace Intranet.Services;
 
 public interface IUsuarioService
 {
+    Task<ServiceResult<TraspasarEquipoResultadoDto>> TraspasarEquipoAsync(TraspasarEquipoDto dto);
     Task<ServiceResult<UsuarioCreadoDto>> CrearUsuarioAsync(CrearUsuarioDto dto);
     Task<ServiceResult<VacacionesUsuarioActualizadoDto>> ActualizarVacacionesAsync(long idUsuario, ActualizarVacacionesUsuarioDto dto);
 
@@ -24,5 +25,5 @@ public interface IUsuarioService
 
     // RRHH activa o desactiva la cuenta de un usuario. Uno desactivado no
     // puede iniciar sesión ni cambiar su contraseña (ver AuthService).
-    Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar);
+    Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar, long idActor);
 }

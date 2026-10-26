@@ -1288,7 +1288,21 @@ namespace Intranet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<long>("VersionAcceso")
+                        .HasColumnType("bigint");
+
                     b.HasKey("IdUsuario");
+
+                    b.HasIndex("Cedula")
+                        .IsUnique();
+
+                    b.HasIndex("CorreoEmpresa")
+                        .IsUnique()
+                        .HasFilter("\"CorreoEmpresa\" <> ''");
+
+                    b.HasIndex("CorreoPersonal")
+                        .IsUnique()
+                        .HasFilter("\"CorreoPersonal\" <> ''");
 
                     b.HasIndex("IdCargo");
 

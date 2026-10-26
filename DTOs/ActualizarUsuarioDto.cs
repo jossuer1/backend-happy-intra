@@ -162,6 +162,7 @@ public class ActualizarUsuarioDto
 
     public bool? TieneVacaciones { get; set; }
 
+    [Range(0, 365)]
     public int? DiasVacacionesAsignados { get; set; }
 
     // --- Condición laboral (solo se tocan los que vienen informados) ---
@@ -214,6 +215,7 @@ public class ActualizarUsuarioDto
 // hasta el final de ese día (hora de Ecuador).
 public class PermisoActualizarPerfilDto
 {
+    [System.Text.Json.Serialization.JsonRequired]
     public bool Habilitar { get; set; }
 
     public DateTime? FechaLimite { get; set; }
@@ -273,6 +275,7 @@ public class RecordatorioActualizacionResultadoDto
 // iniciar sesión ni cambiar su contraseña (ver AuthService).
 public class ActualizarEstadoUsuarioDto
 {
+    [System.Text.Json.Serialization.JsonRequired]
     public bool Activar { get; set; }
 }
 

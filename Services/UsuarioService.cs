@@ -10,7 +10,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Intranet.Services;
 
-public class UsuarioService : IUsuarioService
+public partial class UsuarioService : IUsuarioService
 {
     private readonly AppDbContext _context;
     private readonly IEmailService _emailService;
@@ -220,6 +220,10 @@ public class UsuarioService : IUsuarioService
             }).ToList() ?? new List<PeriodoIess>()
         };
 
+        var errorExpediente = ValidacionesExpediente.Validar(usuario) ?? await ValidarCatalogosAsync(usuario);
+        if (errorExpediente != null)
+            return ServiceResult<UsuarioCreadoDto>.Fallo(errorExpediente);
+
         // 4. Guardar
         _context.Usuarios.Add(usuario);
         await _context.SaveChangesAsync();
@@ -251,6 +255,8 @@ public class UsuarioService : IUsuarioService
 
     public async Task<ServiceResult<VacacionesUsuarioActualizadoDto>> ActualizarVacacionesAsync(long idUsuario, ActualizarVacacionesUsuarioDto dto)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var usuario = await _context.Usuarios.FindAsync(idUsuario);
         if (usuario == null)
             return ServiceResult<VacacionesUsuarioActualizadoDto>.Fallo("Usuario no encontrado.");
@@ -264,8 +270,12 @@ public class UsuarioService : IUsuarioService
             ? (dto.DiasVacacionesAsignados ?? (usuario.DiasVacacionesAsignados > 0 ? usuario.DiasVacacionesAsignados : 15))
             : 0;
 
+        var errorSaldo = await ValidarSaldoFinalAsync(usuario);
+        if (errorSaldo != null) return ServiceResult<VacacionesUsuarioActualizadoDto>.Fallo(errorSaldo);
+
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return ServiceResult<VacacionesUsuarioActualizadoDto>.Ok(new VacacionesUsuarioActualizadoDto
         {
@@ -282,6 +292,8 @@ public class UsuarioService : IUsuarioService
     // sus familiares, contactos de emergencia, títulos y datos bancarios en la misma llamada.
     public async Task<ServiceResult<bool>> ActualizarUsuarioAsync(long id, ActualizarUsuarioDto dto)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var usuario = await _context.Usuarios
             .Include(u => u.Familiares)
             .Include(u => u.ContactosEmergencia)
@@ -395,6 +407,8 @@ public class UsuarioService : IUsuarioService
 
             if (!await _context.Usuarios.AnyAsync(u => u.IdUsuario == dto.IdJefeDirecto.Value && u.Estado && u.EsJefe))
                 return ServiceResult<bool>.Fallo("El jefe directo indicado no existe, está inactivo o no está habilitado como jefe.");
+            if (await FormaCicloAsync(id, dto.IdJefeDirecto.Value))
+                return ServiceResult<bool>.Fallo("El jefe seleccionado produce un ciclo en la jerarquía.");
         }
 
         // No se puede quitar la marca de jefe a quien todavía tiene gente a su cargo:
@@ -667,8 +681,13 @@ public class UsuarioService : IUsuarioService
         if (errorPeriodos != null)
             return ServiceResult<bool>.Fallo(errorPeriodos);
 
+        var errorExpediente = ValidacionesExpediente.Validar(usuario) ?? await ValidarCatalogosAsync(usuario) ?? await ValidarSaldoFinalAsync(usuario);
+        if (errorExpediente != null)
+            return ServiceResult<bool>.Fallo(errorExpediente);
+
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+        await tx.CommitAsync();
 
         return ServiceResult<bool>.Ok(true);
     }
@@ -895,15 +914,25 @@ public class UsuarioService : IUsuarioService
     // puede iniciar sesión ni cambiar su contraseña (ver AuthService.LoginAsync
     // y CambiarContrasenaAsync). Al desactivar, además se le revoca cualquier
     // ventana de autoedición de perfil que tuviera pendiente.
-    public async Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar)
+    public async Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar, long idActor)
     {
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        await SeguridadCuentas.BloquearAsync(_context);
         var usuario = await _context.Usuarios.FindAsync(id);
         if (usuario == null)
             return ServiceResult<bool>.Fallo("Usuario no encontrado.");
 
+        if (!activar && id == idActor)
+            return ServiceResult<bool>.Fallo("No puedes desactivar tu propia cuenta.");
+        if (!activar && usuario.Estado)
+        {
+            var errorRetiro = await SeguridadCuentas.ValidarRetiroAsync(_context, id, usuario.IdRol);
+            if (errorRetiro != null) return ServiceResult<bool>.Fallo(errorRetiro);
+        }
         usuario.Estado = activar;
         if (!activar)
         {
+            usuario.VersionAcceso++;
             usuario.PuedeActualizarPerfil = false;
             usuario.PuedeActualizarHasta = null;
         }
@@ -911,6 +940,7 @@ public class UsuarioService : IUsuarioService
         usuario.FechaActualizacion = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
+        await tx.CommitAsync();
         return ServiceResult<bool>.Ok(true);
     }
 

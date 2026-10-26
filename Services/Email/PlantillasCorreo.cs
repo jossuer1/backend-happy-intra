@@ -5,6 +5,27 @@ namespace Intranet.Services;
 
 public static class PlantillasCorreo
 {
+  public static string AvisoSolicitudVacaciones(string nombre, string empleado, long id,
+    DateTime inicio, DateTime fin, int dias, string? observacion, string url, bool nueva)
+  {
+    var titulo = nueva ? "Nueva solicitud de vacaciones" : "Solicitud de vacaciones rechazada";
+    var mensaje = nueva
+      ? $"{WebUtility.HtmlEncode(empleado)} envió una solicitud de vacaciones para tu revisión."
+      : "Tu jefe directo rechazó tu solicitud de vacaciones. No se descontaron días de tu saldo.";
+    var detalle = string.IsNullOrWhiteSpace(observacion) ? ""
+      : $"<p><strong>{(nueva ? "Motivo" : "Observación del jefe")}:</strong> {WebUtility.HtmlEncode(observacion)}</p>";
+    var cuerpo = $"""
+      <p>Hola <strong>{WebUtility.HtmlEncode(nombre)}</strong>,</p>
+      <p>{mensaje}</p>
+      <p><strong>Solicitud:</strong> #{id}<br/>
+      <strong>Desde:</strong> {inicio:dd/MM/yyyy}<br/>
+      <strong>Hasta:</strong> {fin:dd/MM/yyyy}<br/>
+      <strong>Días:</strong> {dias}</p>
+      {detalle}
+      {BotonIntranet(WebUtility.HtmlEncode(url))}
+      """;
+    return MarcoVacaciones(titulo, cuerpo);
+  }
   public static string BienvenidaConCredenciales(string nombre, string usuario, string claveTemporal, string urlIntranet)
   {
     return $@"

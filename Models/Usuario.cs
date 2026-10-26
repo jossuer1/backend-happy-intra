@@ -47,16 +47,17 @@ public class Usuario
     // editar sus propios datos una vez; al guardar, se vuelve a desactivar sola.
     public bool PuedeActualizarPerfil { get; set; } = false;
 
-    // Fecha límite de la ventana de autoedición (UTC, fin del día en Ecuador). Pasada
-    // esta fecha la ventana se considera cerrada aunque PuedeActualizarPerfil siga en
-    // true. Null = sin plazo.
+    // Fecha límite TENTATIVA de la ventana de autoedición (UTC, fin del día en Ecuador).
+    // Es solo una referencia: al pasar NO se cierra la ventana. La ventana se cierra
+    // cuando el empleado envía sus cambios, confirma que no tiene cambios, o RRHH la
+    // cierra. Quien sigue con la ventana abierta pasada esta fecha se considera
+    // "atrasado" (se calcula al consultar; no se guarda). Null = sin fecha de referencia.
     public DateTime? PuedeActualizarHasta { get; set; }
 
-    // Ventana realmente abierta ahora mismo (solo para uso en memoria; en consultas
-    // LINQ a la base hay que repetir la condición, EF no traduce propiedades NotMapped).
+    // Ventana abierta ahora mismo (solo para uso en memoria). La fecha límite ya no la
+    // cierra: ver comentario de PuedeActualizarHasta.
     [NotMapped]
-    public bool VentanaEdicionAbierta
-        => PuedeActualizarPerfil && (PuedeActualizarHasta == null || PuedeActualizarHasta > DateTime.UtcNow);
+    public bool VentanaEdicionAbierta => PuedeActualizarPerfil;
 
     public string? UrlImagenPerfil { get; set; }
 

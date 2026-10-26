@@ -764,6 +764,85 @@ public class UsuarioService : IUsuarioService
         });
     }
 
+    // Recordatorio por correo a quienes tienen la ventana abierta (aún no enviaron cambios ni
+    // confirmaron "sin cambios"). Quien ya respondió no recibe nada. Si viene NuevaFechaLimite,
+    // se actualiza la fecha de referencia de los destinatarios. No toca nada más.
+    public async Task<ServiceResult<RecordatorioActualizacionResultadoDto>> EnviarRecordatorioActualizacionAsync(
+        RecordatorioActualizacionDto dto)
+    {
+        var ids = dto.IdsUsuarios?.Distinct().ToList() ?? new List<long>();
+        if (!dto.TodosSinEnviar && ids.Count == 0)
+            return ServiceResult<RecordatorioActualizacionResultadoDto>.Fallo(
+                "Indica TodosSinEnviar = true o al menos un usuario en IdsUsuarios.");
+
+        DateTime? nuevoLimite = null;
+        if (dto.NuevaFechaLimite.HasValue)
+        {
+            var errorFecha = ValidarFechaLimite(dto.NuevaFechaLimite);
+            if (errorFecha != null)
+                return ServiceResult<RecordatorioActualizacionResultadoDto>.Fallo(errorFecha);
+
+            nuevoLimite = FechasEcuador.FinDelDiaEnUtc(dto.NuevaFechaLimite.Value);
+        }
+
+        var objetivo = _context.Usuarios.Where(u => u.Estado);
+        if (!dto.TodosSinEnviar)
+            objetivo = objetivo.Where(u => ids.Contains(u.IdUsuario));
+
+        // Ventana abierta = todavía no respondió.
+        var elegibles = objetivo.Where(u => u.PuedeActualizarPerfil);
+
+        var destinatarios = await elegibles
+            .Select(u => new { u.Nombre, u.Apellido, u.CorreoEmpresa, u.CorreoPersonal, u.PuedeActualizarHasta })
+            .ToListAsync();
+
+        if (nuevoLimite.HasValue && destinatarios.Count > 0)
+        {
+            var ahora = DateTime.UtcNow;
+            await elegibles.ExecuteUpdateAsync(set => set
+                .SetProperty(u => u.PuedeActualizarHasta, (DateTime?)nuevoLimite)
+                .SetProperty(u => u.FechaActualizacion, ahora));
+        }
+
+        var urlIntranet = _config["Intranet:UrlBase"] ?? "https://intranet.happypay.com";
+
+        await Parallel.ForEachAsync(
+            destinatarios,
+            new ParallelOptions { MaxDegreeOfParallelism = 5 },
+            async (d, _) =>
+            {
+                var correo = string.IsNullOrWhiteSpace(d.CorreoEmpresa) ? d.CorreoPersonal : d.CorreoEmpresa;
+                if (string.IsNullOrWhiteSpace(correo))
+                    return;
+
+                var referencia = nuevoLimite ?? d.PuedeActualizarHasta;
+                var fecha = referencia.HasValue ? FechasEcuador.FechaLarga(referencia.Value) : null;
+
+                try
+                {
+                    var ok = await _emailService.SendEmailAsync(
+                        correo,
+                        $"{d.Nombre} {d.Apellido}",
+                        "Recordatorio: actualiza tu información en la intranet",
+                        PlantillasCorreo.RecordatorioActualizacionPerfil(d.Nombre, fecha, urlIntranet));
+
+                    if (!ok)
+                        _logger.LogWarning("No se pudo enviar el recordatorio de actualización de perfil a {Correo}.", correo);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error enviando el recordatorio de actualización de perfil a {Correo}.", correo);
+                }
+            });
+
+        return ServiceResult<RecordatorioActualizacionResultadoDto>.Ok(new RecordatorioActualizacionResultadoDto
+        {
+            Enviados = destinatarios.Count,
+            Omitidos = dto.TodosSinEnviar ? 0 : Math.Max(0, ids.Count - destinatarios.Count),
+            FechaLimite = nuevoLimite
+        });
+    }
+
     // La fecha límite debe existir y no ser anterior a hoy (hora de Ecuador).
     private static string? ValidarFechaLimite(DateTime? fechaLimite)
     {

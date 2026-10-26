@@ -5,8 +5,12 @@ namespace Intranet.Services;
 public interface ISolicitudPerfilService
 {
     // El empleado envía sus cambios: se validan y quedan PENDIENTE (no se aplica nada).
-    // Requiere que RRHH le haya habilitado la ventana y que no haya vencido.
+    // Requiere que RRHH le haya habilitado la ventana (la fecha límite es solo una referencia).
     Task<ServiceResult<long>> EnviarAsync(long idUsuario, ActualizarPerfilPropioDto dto);
+
+    // El empleado revisó su información y no tiene cambios: se registra una solicitud ya
+    // resuelta (SIN_CAMBIOS), sin revisión de RRHH, y se cierra su ventana.
+    Task<ServiceResult<long>> ConfirmarSinCambiosAsync(long idUsuario);
 
     Task<ServiceResult<List<SolicitudCambioPerfilResumenDto>>> ObtenerMiasAsync(long idUsuario);
 

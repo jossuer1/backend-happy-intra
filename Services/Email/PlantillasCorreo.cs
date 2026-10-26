@@ -304,6 +304,28 @@ public static class PlantillasCorreo
     return MarcoVacaciones("Actualiza tu información 📝", cuerpo);
   }
 
+  // Recordatorio amable: sin lenguaje de sanción. fechaReferencia puede ser null.
+  public static string RecordatorioActualizacionPerfil(string nombre, string? fechaReferencia, string urlIntranet)
+  {
+    var referencia = string.IsNullOrWhiteSpace(fechaReferencia)
+      ? ""
+      : $"""
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f7f8; border:1px solid #d0e3e5; border-radius:8px; margin-bottom:16px;">
+        <tr><td style="padding:16px; color:#1e5a63;">
+          La fecha de referencia era el <strong>{fechaReferencia}</strong>.
+        </td></tr>
+      </table>
+      """;
+    var cuerpo = $"""
+      <p style="margin:0 0 16px;">Hola <strong>{WebUtility.HtmlEncode(nombre)}</strong>,</p>
+      <p style="margin:0 0 16px;">Recursos Humanos te recuerda que aún está pendiente que revises y actualices tu información personal en la intranet.</p>
+      {referencia}
+      <p style="margin:0 0 16px;">Si tus datos ya están al día, también puedes confirmarlo con un clic desde la intranet. Tus cambios serán revisados por RRHH antes de aplicarse.</p>
+      {BotonIntranet(urlIntranet)}
+      """;
+    return MarcoVacaciones("Recordatorio: actualiza tu información 🔔", cuerpo);
+  }
+
   public static string CambiosPerfilAprobados(string nombre, string? observacion)
   {
     var nota = string.IsNullOrWhiteSpace(observacion)

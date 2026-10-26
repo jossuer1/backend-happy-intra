@@ -7,12 +7,14 @@ namespace Intranet.Models;
 // Flujo: RRHH habilita la ventana de edición -> el empleado envía sus cambios
 // (quedan PENDIENTE, nada se toca todavía) -> RRHH los aprueba (se aplican al
 // usuario) o los rechaza (no se aplica nada y se le devuelve la ventana al
-// empleado para que corrija y reenvíe).
+// empleado para que corrija y reenvíe). Si el empleado revisa y no tiene nada que
+// cambiar, lo confirma y queda como SIN_CAMBIOS (ya resuelta, sin revisión de RRHH).
 public static class EstadoSolicitudCambioPerfil
 {
     public const string Pendiente = "PENDIENTE";
     public const string Aprobada = "APROBADA";
     public const string Rechazada = "RECHAZADA";
+    public const string SinCambios = "SIN_CAMBIOS";
 }
 
 public class SolicitudCambioPerfil

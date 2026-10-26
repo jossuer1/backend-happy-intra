@@ -75,9 +75,12 @@ public class UsuariosController : ControllerBase
                 u.Nacionalidad,
                 u.Estado,
                 u.TieneVacaciones,
-                PuedeActualizarPerfil = u.PuedeActualizarPerfil &&
-                    (u.PuedeActualizarHasta == null || u.PuedeActualizarHasta > ahora),
+                // La fecha límite es tentativa: no cierra la ventana (ver Usuario.PuedeActualizarHasta).
+                u.PuedeActualizarPerfil,
                 u.PuedeActualizarHasta,
+                // Atrasado = ventana abierta y ya pasó la fecha de referencia. Se calcula, no se guarda.
+                Atrasado = u.PuedeActualizarPerfil &&
+                    u.PuedeActualizarHasta != null && u.PuedeActualizarHasta <= ahora,
                 TieneSolicitudPendiente = u.SolicitudesCambioPerfil
                     .Any(sp => sp.Estado == EstadoSolicitudCambioPerfil.Pendiente),
                 u.EsJefe
@@ -99,7 +102,6 @@ public class UsuariosController : ControllerBase
         {
             return Forbid(); // Retorna 403 Forbidden
         }
-        var ahora = DateTime.UtcNow;
         var perfil = await _context.Usuarios
         .Where(u => u.IdUsuario == id)
         .Select(u => new PerfilDto
@@ -120,8 +122,7 @@ public class UsuariosController : ControllerBase
             DiasVacacionesAsignados = u.DiasVacacionesAsignados,
             Estado = u.Estado,
             Rol = u.Rol != null ? u.Rol.Nombre : null,
-            PuedeActualizarPerfil = u.PuedeActualizarPerfil &&
-                (u.PuedeActualizarHasta == null || u.PuedeActualizarHasta > ahora),
+            PuedeActualizarPerfil = u.PuedeActualizarPerfil,
             PuedeActualizarHasta = u.PuedeActualizarHasta,
             TieneSolicitudPendiente = u.SolicitudesCambioPerfil
                 .Any(sp => sp.Estado == EstadoSolicitudCambioPerfil.Pendiente),
@@ -324,10 +325,26 @@ public class UsuariosController : ControllerBase
         return Ok(resultado.Data);
     }
 
+    // Solo RRHH: recordatorio por correo a quienes tienen la ventana abierta y aún no
+    // respondieron (TodosSinEnviar = true, o una lista en IdsUsuarios). Opcionalmente
+    // amplía la fecha de referencia. No cambia nada más: es solo un aviso.
+    [HttpPost("recordatorio-actualizacion")]
+    [Authorize(Roles = "RRHH")]
+    public async Task<IActionResult> EnviarRecordatorioActualizacion([FromBody] RecordatorioActualizacionDto dto)
+    {
+        var resultado = await _usuarioService.EnviarRecordatorioActualizacionAsync(dto);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(resultado.Data);
+    }
+
     // El empleado logueado propone cambios a su información (contacto, estado civil,
     // familiares, contactos de emergencia y títulos). NO se aplican al instante: quedan
     // como solicitud pendiente hasta que RRHH las apruebe o rechace. Solo funciona
-    // mientras RRHH tenga habilitada su ventana de edición y no haya vencido el plazo.
+    // mientras RRHH tenga habilitada su ventana de edición (la fecha límite es solo
+    // una referencia: pasada la fecha puede seguir enviando).
     [HttpPut("mi-perfil")]
     public async Task<IActionResult> ActualizarMiPerfil([FromBody] ActualizarPerfilPropioDto dto)
     {
@@ -341,6 +358,24 @@ public class UsuariosController : ControllerBase
         {
             idSolicitud = resultado.Data,
             mensaje = "Tus cambios fueron enviados a RRHH para su revisión."
+        });
+    }
+
+    // El empleado revisó su información y no tiene nada que cambiar: lo confirma, se
+    // cierra su ventana y queda registrado (estado SIN_CAMBIOS) para que RRHH sepa que respondió.
+    [HttpPost("mi-perfil/confirmar-sin-cambios")]
+    public async Task<IActionResult> ConfirmarSinCambios()
+    {
+        var currentUserId = long.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var resultado = await _solicitudPerfilService.ConfirmarSinCambiosAsync(currentUserId);
+
+        if (!resultado.Exito)
+            return BadRequest(new { mensaje = resultado.Mensaje });
+
+        return Ok(new
+        {
+            idSolicitud = resultado.Data,
+            mensaje = "Registramos que tu información está al día. ¡Gracias!"
         });
     }
 

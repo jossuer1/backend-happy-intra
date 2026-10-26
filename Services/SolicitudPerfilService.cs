@@ -42,17 +42,12 @@ public class SolicitudPerfilService : ISolicitudPerfilService
             return ServiceResult<long>.Fallo("Tu cuenta está inactiva.");
 
         if (!usuario.VentanaEdicionAbierta)
-        {
-            if (usuario.PuedeActualizarPerfil && usuario.PuedeActualizarHasta.HasValue)
-                return ServiceResult<long>.Fallo(
-                    $"El plazo para actualizar tu información venció el {FechasEcuador.FechaLarga(usuario.PuedeActualizarHasta.Value)}. Pídele a RRHH que lo habilite de nuevo.");
-
             return ServiceResult<long>.Fallo(
                 "No tienes habilitada la edición de tu perfil en este momento. Pídele a RRHH que la active.");
-        }
 
         if (PerfilPropioAplicador.EstaVacio(dto))
-            return ServiceResult<long>.Fallo("No enviaste ningún cambio.");
+            return ServiceResult<long>.Fallo(
+                "No enviaste ningún cambio. Si tu información ya está al día, confírmalo con «Mi información está al día».");
 
         if (await _context.SolicitudesCambioPerfil.AnyAsync(s =>
                 s.IdUsuario == idUsuario && s.Estado == EstadoSolicitudCambioPerfil.Pendiente))
@@ -99,6 +94,54 @@ public class SolicitudPerfilService : ISolicitudPerfilService
     }
 
     // ------------------------------------------------------------------
+    // Empleado: confirmar que no tiene cambios
+    // ------------------------------------------------------------------
+    public async Task<ServiceResult<long>> ConfirmarSinCambiosAsync(long idUsuario)
+    {
+        var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.IdUsuario == idUsuario);
+        if (usuario == null)
+            return ServiceResult<long>.Fallo("Usuario no encontrado.");
+
+        if (!usuario.Estado)
+            return ServiceResult<long>.Fallo("Tu cuenta está inactiva.");
+
+        if (!usuario.VentanaEdicionAbierta)
+            return ServiceResult<long>.Fallo(
+                "No tienes habilitada la edición de tu perfil en este momento. Pídele a RRHH que la active.");
+
+        if (await _context.SolicitudesCambioPerfil.AnyAsync(s =>
+                s.IdUsuario == idUsuario && s.Estado == EstadoSolicitudCambioPerfil.Pendiente))
+            return ServiceResult<long>.Fallo("Ya tienes una solicitud pendiente de revisión por RRHH.");
+
+        var ahora = DateTime.UtcNow;
+
+        // Ya resuelta desde el inicio: no tiene revisor ni cambios que aplicar.
+        var solicitud = new SolicitudCambioPerfil
+        {
+            IdUsuario = idUsuario,
+            CambiosJson = "{}",
+            Estado = EstadoSolicitudCambioPerfil.SinCambios,
+            FechaSolicitud = ahora,
+            FechaRevision = ahora
+        };
+
+        await using var tx = await _context.Database.BeginTransactionAsync();
+        _context.SolicitudesCambioPerfil.Add(solicitud);
+        await _context.SaveChangesAsync();
+
+        // Responder cierra la ventana (igual que al enviar cambios o al ser aprobado).
+        await _context.Usuarios.Where(u => u.IdUsuario == idUsuario)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(u => u.PuedeActualizarPerfil, false)
+                .SetProperty(u => u.PuedeActualizarHasta, (DateTime?)null)
+                .SetProperty(u => u.FechaActualizacion, ahora));
+
+        await tx.CommitAsync();
+
+        return ServiceResult<long>.Ok(solicitud.IdSolicitud);
+    }
+
+    // ------------------------------------------------------------------
     // Listados
     // ------------------------------------------------------------------
     public async Task<ServiceResult<List<SolicitudCambioPerfilResumenDto>>> ObtenerMiasAsync(long idUsuario)
@@ -116,9 +159,9 @@ public class SolicitudPerfilService : ISolicitudPerfilService
         {
             var e = estado.Trim().ToUpperInvariant();
             if (e != EstadoSolicitudCambioPerfil.Pendiente && e != EstadoSolicitudCambioPerfil.Aprobada
-                && e != EstadoSolicitudCambioPerfil.Rechazada)
+                && e != EstadoSolicitudCambioPerfil.Rechazada && e != EstadoSolicitudCambioPerfil.SinCambios)
                 return ServiceResult<List<SolicitudCambioPerfilResumenDto>>.Fallo(
-                    "Estado inválido. Usa PENDIENTE, APROBADA o RECHAZADA.");
+                    "Estado inválido. Usa PENDIENTE, APROBADA, RECHAZADA o SIN_CAMBIOS.");
 
             query = query.Where(s => s.Estado == e);
         }

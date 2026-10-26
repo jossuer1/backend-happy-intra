@@ -242,6 +242,32 @@ public class HabilitarActualizacionMasivaResultadoDto
     public DateTime FechaLimite { get; set; }
 }
 
+// RRHH envía un recordatorio a quienes tienen la ventana abierta y aún no respondieron
+// (POST /api/Usuarios/recordatorio-actualizacion). Opcionalmente amplía la fecha de referencia.
+public class RecordatorioActualizacionDto
+{
+    // true = a todos los activos con la ventana abierta; false = solo a IdsUsuarios.
+    public bool TodosSinEnviar { get; set; }
+
+    public List<long>? IdsUsuarios { get; set; }
+
+    // Opcional. Si viene, reemplaza la fecha de referencia de los destinatarios
+    // (no puede ser anterior a hoy).
+    public DateTime? NuevaFechaLimite { get; set; }
+}
+
+public class RecordatorioActualizacionResultadoDto
+{
+    public int Enviados { get; set; }
+
+    // De los ids indicados, los que no tenían la ventana abierta (ya respondieron,
+    // están inactivos, etc.). Con TodosSinEnviar siempre es 0.
+    public int Omitidos { get; set; }
+
+    // Solo viene si se amplió la fecha.
+    public DateTime? FechaLimite { get; set; }
+}
+
 // RRHH usa este DTO para activar/desactivar la cuenta de un empleado
 // (PATCH /api/Usuarios/{id}/estado). Un usuario desactivado no puede
 // iniciar sesión ni cambiar su contraseña (ver AuthService).

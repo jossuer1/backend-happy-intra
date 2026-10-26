@@ -17,6 +17,11 @@ public interface IUsuarioService
     Task<ServiceResult<HabilitarActualizacionMasivaResultadoDto>> HabilitarActualizacionMasivaAsync(
         HabilitarActualizacionMasivaDto dto);
 
+    // RRHH envía un recordatorio a quienes tienen la ventana abierta (aún no respondieron),
+    // y opcionalmente amplía su fecha de referencia.
+    Task<ServiceResult<RecordatorioActualizacionResultadoDto>> EnviarRecordatorioActualizacionAsync(
+        RecordatorioActualizacionDto dto);
+
     // RRHH activa o desactiva la cuenta de un usuario. Uno desactivado no
     // puede iniciar sesión ni cambiar su contraseña (ver AuthService).
     Task<ServiceResult<bool>> ActualizarEstadoAsync(long id, bool activar);

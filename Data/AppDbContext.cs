@@ -26,10 +26,20 @@ public class AppDbContext : DbContext
     public DbSet<SolicitudCambioPerfil> SolicitudesCambioPerfil { get; set; }
     public DbSet<Imagen> Imagen { get; set; }
     public DbSet<PeriodoIess> PeriodosIess { get; set; }
+    public DbSet<FelicitacionCumpleanos> FelicitacionesCumpleanos { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<FelicitacionCumpleanos>(e =>
+        {
+            e.ToTable("FelicitacionCumpleanos");
+            e.HasKey(f => new { f.IdUsuario, f.Anio });
+            e.HasOne<Usuario>().WithMany().HasForeignKey(f => f.IdUsuario).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<Usuario>().WithMany().HasForeignKey(f => f.IdUsuarioRRHH).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Usuario>().HasIndex(u => u.Cedula).IsUnique();
         modelBuilder.Entity<Usuario>().HasIndex(u => u.CorreoEmpresa).IsUnique()
             .HasFilter("\"CorreoEmpresa\" <> ''");

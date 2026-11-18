@@ -54,6 +54,8 @@ builder.Services.AddScoped<IVacacionService, VacacionService>();
 builder.Services.AddScoped<PerfilPropioAplicador>();
 builder.Services.AddScoped<ISolicitudPerfilService, SolicitudPerfilService>();
 
+builder.Services.AddScoped<DashboardRrhhService>();
+builder.Services.AddScoped<CumpleanosService>();
 builder.Services.AddHostedService<CumpleanosBackgroundService>();
 
 builder.Services.AddCors(options =>

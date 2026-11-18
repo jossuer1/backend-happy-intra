@@ -598,6 +598,27 @@ namespace Intranet.Migrations
                     b.ToTable("Familiar");
                 });
 
+            modelBuilder.Entity("Intranet.Models.FelicitacionCumpleanos", b =>
+                {
+                    b.Property<long>("IdUsuario")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Anio")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("FechaEnvio")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("IdUsuarioRRHH")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("IdUsuario", "Anio");
+
+                    b.HasIndex("IdUsuarioRRHH");
+
+                    b.ToTable("FelicitacionCumpleanos", (string)null);
+                });
+
             modelBuilder.Entity("Intranet.Models.Genero", b =>
                 {
                     b.Property<long>("IdGenero")
@@ -1429,6 +1450,20 @@ namespace Intranet.Migrations
                         .IsRequired();
 
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("Intranet.Models.FelicitacionCumpleanos", b =>
+                {
+                    b.HasOne("Intranet.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("IdUsuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Intranet.Models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("IdUsuarioRRHH")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Intranet.Models.PeriodoIess", b =>

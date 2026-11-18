@@ -1,97 +1,67 @@
-using Microsoft.EntityFrameworkCore;
 using Intranet.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace Intranet.Services;
 
-// Revisa, una vez al día, si algún colaborador activo cumple años hoy y le
-// manda un correo de felicitación de parte del equipo de Happy Pay.
-//
-// No hay tabla de "correos ya enviados": se apoya en que, mientras el
-// proceso siga corriendo, solo se dispara una vez por fecha (se guarda en
-// memoria la última fecha en la que ya se envió). Si la API se reinicia
-// más de una vez el mismo día después de la hora de envío, podría volver a
-// mandar el correo de ese día; para una intranet interna es un riesgo
-// aceptable, pero si se necesita garantía total, lo ideal sería registrar
-// el envío en una tabla en base de datos.
-public class CumpleanosBackgroundService : BackgroundService
+public class CumpleanosBackgroundService(
+    IServiceScopeFactory scopeFactory,
+    ILogger<CumpleanosBackgroundService> logger) : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<CumpleanosBackgroundService> _logger;
-
-    // Hora del día (UTC) a la que se revisan los cumpleaños. Ecuador está en
-    // UTC-5 todo el año (sin horario de verano), así que 13:00 UTC = 8:00 AM
-    // hora de Ecuador. Ajustar aquí si la empresa opera en otra zona horaria.
-    private static readonly TimeSpan HoraEnvioUtc = TimeSpan.FromHours(13);
-
-    public CumpleanosBackgroundService(IServiceScopeFactory scopeFactory, ILogger<CumpleanosBackgroundService> logger)
-    {
-        _scopeFactory = scopeFactory;
-        _logger = logger;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        DateTime? ultimaFechaEnviada = null;
-
+        DateOnly? ultimaFechaRevisada = null;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var ahora = DateTime.UtcNow;
-
-                if (ahora.TimeOfDay >= HoraEnvioUtc && ultimaFechaEnviada != ahora.Date)
+                var hoy = CumpleanosService.HoyEcuador(ahora);
+                // 13:00 UTC corresponde a las 08:00 en Ecuador continental.
+                if (ahora.Hour >= 13 && ultimaFechaRevisada != hoy)
                 {
-                    await EnviarFelicitacionesDelDiaAsync(ahora, stoppingToken);
-                    ultimaFechaEnviada = ahora.Date;
+                    await EnviarFelicitacionesDelDiaAsync(hoy, stoppingToken);
+                    ultimaFechaRevisada = hoy;
                 }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error revisando/enviando correos de cumpleaños.");
+                logger.LogError(ex, "Error al revisar los cumpleaños del día.");
             }
 
-            // Revisa cada 30 minutos; no necesita más precisión para un correo diario.
             await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
         }
     }
 
-    private async Task EnviarFelicitacionesDelDiaAsync(DateTime hoy, CancellationToken stoppingToken)
+    private async Task EnviarFelicitacionesDelDiaAsync(DateOnly hoy, CancellationToken ct)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-
-        var cumpleaneros = await context.Usuarios
-            .Where(u => u.Estado
-                && u.FechaNacimiento != null
+        using var scope = scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var incluirBisiestos = hoy.Month == 2 && hoy.Day == 28 && !DateTime.IsLeapYear(hoy.Year);
+        var pendientes = await db.Usuarios
+            .Where(u => u.Estado && u.FechaNacimiento != null
                 && u.FechaNacimiento.Value.Month == hoy.Month
-                && u.FechaNacimiento.Value.Day == hoy.Day)
-            .ToListAsync(stoppingToken);
+                && (u.FechaNacimiento.Value.Day == hoy.Day || (incluirBisiestos && u.FechaNacimiento.Value.Day == 29))
+                && !db.FelicitacionesCumpleanos.Any(f => f.IdUsuario == u.IdUsuario && f.Anio == hoy.Year))
+            .Select(u => u.IdUsuario)
+            .ToListAsync(ct);
 
-        foreach (var usuario in cumpleaneros)
+        foreach (var id in pendientes)
         {
-            var correoDestino = !string.IsNullOrWhiteSpace(usuario.CorreoEmpresa)
-                ? usuario.CorreoEmpresa
-                : usuario.CorreoPersonal;
-
-            if (string.IsNullOrWhiteSpace(correoDestino))
-                continue;
-
             try
             {
-                await emailService.SendEmailAsync(
-                    correoDestino,
-                    $"{usuario.Nombre} {usuario.Apellido}",
-                    "¡Feliz cumpleaños de parte del equipo Happy Pay! 🎉",
-                    PlantillasCorreo.Cumpleanos(usuario.Nombre)
-                );
-
-                _logger.LogInformation("Correo de cumpleaños enviado a {Correo} (usuario {IdUsuario}).", correoDestino, usuario.IdUsuario);
+                using var scopeEnvio = scopeFactory.CreateScope();
+                var servicio = scopeEnvio.ServiceProvider.GetRequiredService<CumpleanosService>();
+                var resultado = await servicio.FelicitarAsync(id, null, ct);
+                if (!resultado.Exito)
+                    logger.LogWarning("Felicitación automática al usuario {IdUsuario}: {Mensaje}", id, resultado.Mensaje);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                // Si falla el correo de una persona, no debe frenar el envío al resto.
-                _logger.LogError(ex, "No se pudo enviar el correo de cumpleaños al usuario {IdUsuario}.", usuario.IdUsuario);
+                logger.LogError(ex, "Error al procesar la felicitación automática del usuario {IdUsuario}.", id);
             }
         }
     }

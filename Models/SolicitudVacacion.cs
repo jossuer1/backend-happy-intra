@@ -11,6 +11,7 @@ namespace Intranet.Models;
 public static class EstadoSolicitudVacacion
 {
     public const string PendienteJefe = "PENDIENTE_JEFE";
+    public const string PendienteRrhh = "PENDIENTE_RRHH";
     public const string Aprobada = "APROBADA";
     public const string RechazadaJefe = "RECHAZADA_JEFE";
     // La solicitud estaba aprobada pero RRHH anuló el descuento (vacaciones canceladas).

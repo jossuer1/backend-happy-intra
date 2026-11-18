@@ -122,6 +122,12 @@ builder.Services.AddAuthentication(options =>
 });
 var app = builder.Build();
 
+if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 app.MapHealthChecks("/health");
 
@@ -138,6 +144,14 @@ app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
     try { await next(); }
+    catch (PostgresException ex) when (!context.Response.HasStarted
+        && ex.SqlState == PostgresErrorCodes.UndefinedTable
+        && context.Request.Path.StartsWithSegments("/api/cumpleanos", StringComparison.OrdinalIgnoreCase))
+    {
+        app.Logger.LogError(ex, "No se pudo consultar el registro de cumpleaños. Verifica las migraciones de la base de datos.");
+        context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        await context.Response.WriteAsJsonAsync(new { mensaje = "El servicio de cumpleaños no está disponible. Contacta a soporte." });
+    }
     catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
     {
         context.Response.StatusCode = StatusCodes.Status409Conflict;
